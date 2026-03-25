@@ -1,0 +1,11 @@
+build/
+build-wasm/
+cmake-build-*/
+.vscode/
+.idea/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+.DS_Store
