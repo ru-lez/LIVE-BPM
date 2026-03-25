@@ -1,3 +1,7 @@
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #include "livebpm/dsp/SpectralAnalysis.h"
 #include "kiss_fft.h"
 namespace livebpm { namespace dsp {
