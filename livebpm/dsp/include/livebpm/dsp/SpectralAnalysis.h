@@ -3,6 +3,9 @@
 #include <vector>
 #include <cmath>
 
+// Forward declaration substituted due to MSVC linker issues with kiss_fft_cpx
+#include "kiss_fft.h"
+
 namespace livebpm { namespace dsp {
 
 class SpectralAnalysis {
@@ -21,11 +24,9 @@ public:
 private:
     int fftSize_;
     std::vector<float> hannWindow_;
-    void* kissConfig_; // kiss_fft_cfg (opaque to avoid exposing kiss_fft.h)
-    std::vector<float> fftInReal_;
-    std::vector<float> fftInImag_;
-    std::vector<float> fftOutReal_;
-    std::vector<float> fftOutImag_;
+    void* kissConfig_;
+    std::vector<kiss_fft_cpx> fftIn_;
+    std::vector<kiss_fft_cpx> fftOut_;
 };
 
 }} // namespace livebpm::dsp
