@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "livebpm/dsp/SpectralAnalysis.h"
 #include "livebpm/dsp/OnsetDetection.h"
 #include "TestSignals.h"
@@ -69,4 +70,63 @@ TEST_CASE("OnsetDetection: click track produces periodic flux peaks", "[onset][i
 
     // At 120 BPM in 3 seconds: 6 beats. We should detect at least 4.
     REQUIRE(peakCount >= 4);
+}
+
+TEST_CASE("OnsetDetection: complexDomain ground truth - steady state", "[onset][complex]") {
+    const int numBins = 1;
+    float currMag[] = { 1.0f };
+    float prevMag[] = { 1.0f };
+    float currPhase[] = { 1.0f };
+    float prevPhase[] = { 0.5f };
+    float prevPrevPhase[] = { 0.0f };
+
+    float cd = OnsetDetection::complexDomain(currMag, currPhase, prevMag, prevPhase, prevPrevPhase, numBins);
+    
+    // With perfect prediction, CD should be exactly 0
+    REQUIRE_THAT(cd, Catch::Matchers::WithinAbs(0.0, 1e-6));
+}
+
+TEST_CASE("OnsetDetection: complexDomain ground truth - phase jump", "[onset][complex]") {
+    const int numBins = 1;
+    float currMag[] = { 1.0f };
+    float prevMag[] = { 1.0f };
+    
+    // Linear trajectory predicts 1.0, but we provide 1.0 + PI
+    float prevPrevPhase[] = { 0.0f };
+    float prevPhase[] = { 0.5f };
+    float currPhase[] = { 1.0f + 3.1415926535f }; 
+
+    float cd = OnsetDetection::complexDomain(currMag, currPhase, prevMag, prevPhase, prevPrevPhase, numBins);
+    
+    // Expected distance for a PI shift with Mag=1.0 is 2.0
+    REQUIRE_THAT(cd, Catch::Matchers::WithinAbs(2.0, 1e-5));
+}
+
+TEST_CASE("OnsetDetection: complexDomain ground truth - magnitude step", "[onset][complex]") {
+    const int numBins = 1;
+    // Magnitude doubles, phase remains perfectly predictable
+    float currMag[] = { 2.0f };
+    float prevMag[] = { 1.0f };
+    float currPhase[] = { 1.0f };
+    float prevPhase[] = { 0.5f };
+    float prevPrevPhase[] = { 0.0f };
+
+    float cd = OnsetDetection::complexDomain(currMag, currPhase, prevMag, prevPhase, prevPrevPhase, numBins);
+    
+    // Expected distance: sqrt(2^2 + 1^2 - 2*2*1*cos(0)) = sqrt(5 - 4) = 1.0
+    REQUIRE_THAT(cd, Catch::Matchers::WithinAbs(1.0, 1e-6));
+}
+
+TEST_CASE("OnsetDetection: complexDomain normalisation scales with bin count", "[onset][complex]") {
+    const int numBins = 2;
+    float currMag[] = { 1.0f, 1.0f };
+    float prevMag[] = { 1.0f, 1.0f };
+    float currPhase[] = { 1.0f + 3.1415926535f, 1.0f + 3.1415926535f }; 
+    float prevPhase[] = { 0.5f, 0.5f };
+    float prevPrevPhase[] = { 0.0f, 0.0f };
+
+    float cd = OnsetDetection::complexDomain(currMag, currPhase, prevMag, prevPhase, prevPrevPhase, numBins);
+    
+    // Individual bin distance is 2.0. Total distance is 4.0. Normalised (divided by 2 bins) is 2.0
+    REQUIRE_THAT(cd, Catch::Matchers::WithinAbs(2.0, 1e-5));
 }
