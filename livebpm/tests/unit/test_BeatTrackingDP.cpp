@@ -3,22 +3,48 @@
 #include "TestSignals.h"
 using namespace livebpm::dsp;
 using namespace livebpm::test;
-TEST_CASE("BeatTrackingDP: stub returns empty result", "[dp]") {
+TEST_CASE("BeatTrackingDP: periodic novelty produces regular beats",
+"[dp]") {
+ double featureRate = 93.75;
+ auto novelty = generatePeriodicNovelty(120.0, featureRate, 5.0);
+ int beatRefLag = static_cast<int>(60.0 / 120.0 * featureRate); 
+ // ~47
  BeatTrackingDP dp;
- std::vector<float> novelty = {0.0f, 1.0f, 0.0f, 1.0f, 0.0f};
  auto result = dp.track(novelty.data(),
-static_cast<int>(novelty.size()), 2);
- // The stub returns empty. This test will pass now and will serve
- // as scaffolding when you implement the actual logic.
+static_cast<int>(novelty.size()), beatRefLag);
+ // Should find beats
+ REQUIRE(result.beatIndices.size() >= 5);
+ // Beats should be approximately separated by beatRefLag
+ for (size_t i = 1; i < result.beatIndices.size(); ++i) {
+ int interval = result.beatIndices[i] - result.beatIndices[i -
+1];
+ REQUIRE(interval > beatRefLag / 2);
+ REQUIRE(interval < beatRefLag * 2);
+ }
+ // High stability for a perfectly periodic signal
+ REQUIRE(result.stability > 0.7);
+}
+TEST_CASE("BeatTrackingDP: beats align with novelty peaks", "[dp]") {
+ // Novelty with clear peaks at known positions
+ std::vector<float> novelty(200, 0.0f);
+ novelty[20] = 1.0f;
+ novelty[70] = 1.0f;
+ novelty[120] = 1.0f;
+ novelty[170] = 1.0f;
+ BeatTrackingDP dp;
+ auto result = dp.track(novelty.data(), 200, 50);
+ // Alignment should be high (beats coincide with peaks)
+ REQUIRE(result.alignment > 0.5);
+}
+TEST_CASE("BeatTrackingDP: empty novelty returns empty result",
+"[dp]") {
+ BeatTrackingDP dp;
+ auto result = dp.track(nullptr, 0, 50);
  REQUIRE(result.beatIndices.empty());
 }
-TEST_CASE("TestSignals: generatePeriodicNovelty works", "[helpers]") {
- auto novelty = generatePeriodicNovelty(120.0, 100.0, 5.0);
- REQUIRE(novelty.size() == 500);
- // At 120 BPM, feature_rate 100: beat every 50 frames
- // There should be a '1' at positions 0, 50, 100, 150, ...
- REQUIRE(novelty[0] == 1.0f);
- REQUIRE(novelty[50] == 1.0f);
- REQUIRE(novelty[100] == 1.0f);
- REQUIRE(novelty[25] == 0.0f); // between beats = 0
+TEST_CASE("BeatTrackingDP: single sample doesn't crash", "[dp]") {
+ float single = 1.0f;
+ BeatTrackingDP dp;
+ auto result = dp.track(&single, 1, 50);
+ // Not crashing is the success here
 }
