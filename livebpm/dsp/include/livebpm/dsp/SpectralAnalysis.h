@@ -13,6 +13,12 @@ public:
     explicit SpectralAnalysis(int fftSize);
     ~SpectralAnalysis();
 
+    // Rule of 5
+    SpectralAnalysis(const SpectralAnalysis&) = delete;
+    SpectralAnalysis& operator=(const SpectralAnalysis&) = delete;
+    SpectralAnalysis(SpectralAnalysis&&) noexcept = delete;
+    SpectralAnalysis& operator=(SpectralAnalysis&&) noexcept = delete;
+
     // Applies Hann window + FFT. Writes to magnitude and phase.
     void compute(const float* samples,
                  float* magnitude,
@@ -24,7 +30,7 @@ public:
 private:
     int fftSize_;
     std::vector<float> hannWindow_;
-    void* kissConfig_;
+    void* kissConfig_ = nullptr;
     std::vector<kiss_fft_cpx> fftIn_;
     std::vector<kiss_fft_cpx> fftOut_;
 };
