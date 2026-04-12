@@ -1,16 +1,19 @@
 #pragma once
 
 #include <vector>
-#include <kiss_fft.h>
+#include <cmath>
 
-namespace livebpm {
-namespace dsp {
+// Forward declaration substituted due to MSVC linker issues with kiss_fft_cpx
+#include "kiss_fft.h"
+
+namespace livebpm { namespace dsp {
 
 class SpectralAnalysis {
 public:
     explicit SpectralAnalysis(int fftSize);
     ~SpectralAnalysis();
 
+    // Applies Hann window + FFT. Writes to magnitude and phase.
     void compute(const float* samples,
                  float* magnitude,
                  float* phase);
@@ -20,13 +23,10 @@ public:
 
 private:
     int fftSize_;
-
     std::vector<float> hannWindow_;
-
-    kiss_fft_cfg kissConfig_;
+    void* kissConfig_;
     std::vector<kiss_fft_cpx> fftIn_;
     std::vector<kiss_fft_cpx> fftOut_;
 };
 
-} // namespace dsp
-} // namespace livebpm
+}} // namespace livebpm::dsp
