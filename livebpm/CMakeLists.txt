@@ -52,3 +52,10 @@ catch_discover_tests(livebpm_tests)
 # --- CLI (will be activated in Week 4) ---
 # add_executable(livebpm_cli cli/main.cpp)
 # target_link_libraries(livebpm_cli PRIVATE livebpm_core)
+add_executable(livebpm_cli cli/main.cpp)
+target_link_libraries(livebpm_cli PRIVATE livebpm_core)
+target_include_directories(livebpm_cli PRIVATE extern/miniaudio)
+# miniaudio needs some links on Linux
+if(UNIX AND NOT APPLE)
+ target_link_libraries(livebpm_cli PRIVATE pthread dl m)
+endif()
