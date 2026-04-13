@@ -14,6 +14,12 @@ public:
 
     // Writes samples to the buffer
     void write(const T* data, size_t count) {
+        // Overflow catching: if count exceeds capacity, keep only the most recent 'capacity' samples
+        if (count > capacity_) {
+            data += (count - capacity_);
+            count = capacity_;
+        }
+
         for (size_t i = 0; i < count; ++i) {
             buffer_[writePos_] = data[i];
             writePos_ = (writePos_ + 1) % capacity_;
