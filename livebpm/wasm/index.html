@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiveBPM - WebAssembly</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; background: #1a1a1a; color: #eee;
+        }
+        .container { text-align: center; }
+        h1 { font-size: 1.8rem; margin-bottom: 2em; opacity: 0.7; }
+        .bpm-display {
+            font-size: 5rem; font-weight: 700; color: #00d4aa;
+            font-variant-numeric: tabular-nums; min-height: 120px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .confidence { font-size: 1.2rem; margin-top: 1rem; opacity: 0.8; }
+        .confidence-bar {
+            width: 300px; height: 8px; background: #333; border-radius: 4px;
+            margin: 0.5em auto; overflow: hidden;
+        }
+        .confidence-fill {
+            height: 100%; background: #00d4aa; border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        button {
+            margin-top: 2rem; padding: 0.8rem 2rem; font-size: 1.1rem;
+            background: #00d4aa; color: #1a1a1a; border: none;
+            border-radius: 8px; cursor: pointer; font-weight: 600;
+        }
+        button:hover { background: #00f0c0; }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .status { margin-top: 1rem; font-size: 0.9rem; opacity: 0.5; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LiveBPM</h1>
+        <div class="bpm-display" id="bpmDisplay">--</div>
+        
+        <div class="confidence">
+            Confidence
+            <div class="confidence-bar">
+                <div class="confidence-fill" id="confidenceFill" style="width: 0%"></div>
+            </div>
+        </div>
+        
+        <button id="startBtn" onclick="startAudio()" disabled>Start</button>
+        <div class="status" id="status">Loading WASM...</div>
+    </div>
+
+<script type="module">        
+        let audioContext = null;
+
+        window.startAudio = async function() {
+            const btn = document.getElementById('startBtn');
+            const status = document.getElementById('status');
+            
+            try {
+                btn.disabled = true;
+                status.textContent = 'Requesting microphone access...';
+
+                // Create AudioContext
+                audioContext = new AudioContext({ sampleRate: 48000 });
+                
+                // Request microphone stream
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: { 
+                        echoCancellation: false, 
+                        noiseSuppression: false, 
+                        autoGainControl: false 
+                    }
+                });
+
+                // Fetch WASM binary on main thread
+                status.textContent = 'Downloading WASM binary...';
+                const wasmResponse = await fetch('livebpm_wasm.wasm');
+                const wasmBinary = await wasmResponse.arrayBuffer();
+
+                status.textContent = 'Loading WASM Module...';
+
+                // Load AudioWorklet
+                await audioContext.audioWorklet.addModule('processor.js');
+
+                // Create worklet node
+                const workletNode = new AudioWorkletNode(audioContext, 'livebpm-processor');
+                
+                // Listen for results from worklet
+                workletNode.port.onmessage = (event) => {
+                    const { type, data, message } = event.data;
+                    if (type === 'ready') {
+                        status.textContent = 'Listening... play a rhythm!';
+                        btn.textContent = 'Listening...';
+                    } else if (type === 'result') {
+                        updateDisplay(data);
+                    } else if (type === 'error') {
+                        status.textContent = 'Error: ' + message;
+                    }
+                };
+
+                // Connect graph: Mic -> WorkletNode
+                const source = audioContext.createMediaStreamSource(stream);
+                source.connect(workletNode);
+
+                // Initialise WASM engine in worklet
+                workletNode.port.postMessage({ 
+                    type: 'init',
+                    sampleRate: audioContext.sampleRate,
+                    wasmBinary: wasmBinary
+                });
+
+            } catch (err) {
+                status.textContent = 'Error: ' + err.message;
+                btn.disabled = false;
+                btn.textContent = 'Retry';
+            }
+        };
+
+        function updateDisplay(data) {
+            const bpmEl = document.getElementById('bpmDisplay');
+            const confEl = document.getElementById('confidenceFill');
+            
+            if (data.hasValidEstimate) {
+                bpmEl.textContent = data.bpm.toFixed(1);
+                confEl.style.width = (data.confidence * 100) + '%';
+            } else {
+                bpmEl.textContent = '--';
+                confEl.style.width = '0%';
+            }
+        }
+
+        // Enable the button once the script is loaded
+        document.getElementById('status').textContent = 'Ready. Press Start.';
+        document.getElementById('startBtn').disabled = false;
+    </script>
+</body>
+</html>
