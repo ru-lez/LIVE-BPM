@@ -1,11 +1,13 @@
 #pragma once
+
 #include <vector>
 
-namespace livebpm { namespace dsp {
+namespace livebpm {
+namespace dsp {
 
 struct TempoResult {
     double bpm = 0.0;
-    double strength = 0.0;
+    double strength = 0.0; // autocorrelation peak strength
 };
 
 class TempoEstimation {
