@@ -48,7 +48,9 @@ struct Engine::Impl {
           fftWindow(fftSize),
           currentMag(numBins, 0.0f),
           previousMag(numBins, 0.0f),
-          phase(numBins)
+          phase(numBins, 0.0f),
+          previousPhase(numBins, 0.0f),
+          previousPreviousPhase(numBins, 0.0f)
     {
         maxNoveltyLength = static_cast<int>(cfg.analysisWindowSeconds * featureRate);
         noveltyBuffer.resize(maxNoveltyLength, 0.0f);
