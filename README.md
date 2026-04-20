@@ -33,7 +33,7 @@ From the project root (livebpm)
 ```bash
 mkdir build-wasm && cd build-wasm
 emcmake cmake ..
-cmake -- build .
+cmake --build .
 ```
 
 This generates
@@ -42,10 +42,11 @@ This generates
 
 ## Serve Locally and Test
 Ensure you are on the build-wasm folder
+
 Copy the web files
 ```bash
 cp ../wasm/processor.js .
-cp ..wasm/index.html .
+cp ../wasm/index.html .
 ```
 
 Start with python

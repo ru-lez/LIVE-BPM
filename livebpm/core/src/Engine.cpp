@@ -28,6 +28,8 @@ struct Engine::Impl {
     std::vector<float> currentMag;
     std::vector<float> previousMag;
     std::vector<float> phase;
+    std::vector<float> previousPhase;
+    std::vector<float> previousPreviousPhase;
     std::vector<float> noveltyBuffer;
 
     int hopCounter = 0;
@@ -77,9 +79,11 @@ void Engine::processBlock(const float* samples, int numSamples) {
         // FFT
         d.spectral.compute(d.fftWindow.data(), d.currentMag.data(), d.phase.data());
 
-        // Spectral flux
-        float flux = dsp::OnsetDetection::spectralFlux(
-            d.currentMag.data(), d.previousMag.data(), d.numBins
+        // Complex Domain Onset Detection
+        float flux = dsp::OnsetDetection::complexDomain(
+            d.currentMag.data(), d.phase.data(), 
+            d.previousMag.data(), d.previousPhase.data(), 
+            d.previousPreviousPhase.data(), d.numBins
         );
 
         // Store in novelty buffer (circular)
