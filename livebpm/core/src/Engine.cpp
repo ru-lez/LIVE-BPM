@@ -4,6 +4,7 @@
 #include "livebpm/dsp/TempoEstimation.h"
 #include "livebpm/dsp/BeatTrackingDP.h"
 #include "livebpm/dsp/RingBuffer.h"
+#include <iostream>
 
 #include <chrono>
 #include <algorithm>
@@ -81,22 +82,38 @@ void Engine::processBlock(const float* samples, int numSamples) {
         // FFT
         d.spectral.compute(d.fftWindow.data(), d.currentMag.data(), d.phase.data());
 
+        // Calculate Spectral Flux
+        float flux = dsp::OnsetDetection::spectralFlux(
+            d.currentMag.data(), d.previousMag.data(), d.numBins);
+
         // Complex Domain Onset Detection
-        float flux = dsp::OnsetDetection::complexDomain(
+        float cd = dsp::OnsetDetection::complexDomain(
             d.currentMag.data(), d.phase.data(), 
             d.previousMag.data(), d.previousPhase.data(), 
             d.previousPreviousPhase.data(), d.numBins
         );
 
+        // Combine Complex Domain and Spectral Flux
+        // Use a logarithmic combination to balance the scales and enhance peaks
+        float lambda = 10.0f;
+        float combinedNovelty = std::log1p(lambda * (flux + cd));
+        
+        // DEBUG: raw novelty values in console
+        // std::cout << "Flux: " << flux << " | CD: " << cd << " | Combined: " << combinedNovelty << "\n";
+
         // Store in novelty buffer (circular)
         if (d.noveltyWritePos < d.maxNoveltyLength) {
-            d.noveltyBuffer[d.noveltyWritePos++] = flux;
+            d.noveltyBuffer[d.noveltyWritePos] = combinedNovelty;
+            d.noveltyWritePos++;
         } else {
-            std::copy(d.noveltyBuffer.begin() + 1, d.noveltyBuffer.end(), d.noveltyBuffer.begin());
-            d.noveltyBuffer.back() = flux;
+            // Shift left
+            std::move(d.noveltyBuffer.begin() + 1, d.noveltyBuffer.end(), d.noveltyBuffer.begin());
+            d.noveltyBuffer.back() = combinedNovelty;
         }
 
-        // Copy magnitude for the next frame
+        // Shift phase and magnitude buffers for next iteration
+        std::copy(d.previousPhase.begin(), d.previousPhase.end(), d.previousPreviousPhase.begin());
+        std::copy(d.phase.begin(), d.phase.end(), d.previousPhase.begin());
         std::copy(d.currentMag.begin(), d.currentMag.end(), d.previousMag.begin());
     }
 
