@@ -37,8 +37,11 @@ struct Engine::Impl {
     int pitchHoldoff = 0;
     int unvoicedFrames = 0;
     std::vector<float> recentPitches{0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-    std::vector<float> fluxDelay{0.0f, 0.0f, 0.0f}; 
-    std::vector<float> cdDelay{0.0f, 0.0f, 0.0f};
+    std::vector<float> fluxDelay{0.0f, 0.0f}; 
+    std::vector<float> cdDelay{0.0f, 0.0f};
+
+    float fluxMovingAverage = 0.0f;
+    float cdMovingAverage = 0.0f;
 
     int hopCounter = 0;
     int noveltyWritePos = 0;
@@ -91,7 +94,8 @@ void Engine::processBlock(const float* samples, int numSamples) {
 
         // Calculate Spectral Flux
         float flux = dsp::OnsetDetection::spectralFlux(
-            d.currentMag.data(), d.previousMag.data(), d.numBins);
+            d.currentMag.data(), d.previousMag.data(), d.numBins
+        );
 
         // Calculate Complex Domain
         float cd = dsp::OnsetDetection::complexDomain(
@@ -108,18 +112,20 @@ void Engine::processBlock(const float* samples, int numSamples) {
         frameEnergy /= static_cast<float>(d.numBins);
 
         // Get raw pitch from MPM
-        float rawPitch = 0.0f;
-
         // Only evaluate pitch if the frame has enough energy to be a real instrument
+        float rawPitch = 0.0f;
         if (frameEnergy > 0.005f) { 
             rawPitch = dsp::PitchTracking::estimatePitchMPM(
                 d.fftWindow.data(), d.fftSize, static_cast<float>(d.config.sampleRate)
             );
         }
         
-        // 2. Apply 5-point Median Filter to eliminate 1-frame octave glitches
-        d.recentPitches.erase(d.recentPitches.begin()); 
-        d.recentPitches.push_back(rawPitch);
+        // Apply 5-point Median Filter to eliminate 1-frame octave glitches
+        d.recentPitches[0] = d.recentPitches[1];
+        d.recentPitches[1] = d.recentPitches[2];
+        d.recentPitches[2] = d.recentPitches[3];
+        d.recentPitches[3] = d.recentPitches[4];
+        d.recentPitches[4] = rawPitch;
         
         std::vector<float> sortedPitches = d.recentPitches;
         std::sort(sortedPitches.begin(), sortedPitches.end());
@@ -160,37 +166,55 @@ void Engine::processBlock(const float* samples, int numSamples) {
             }
         }
 
+        // Defer novelty calculation by 2 frames to align with the phase-based CD algorithm
         d.fluxDelay.push_back(flux);
         d.cdDelay.push_back(cd);
-        float alignedFlux = d.fluxDelay.front();
-        float alignedCd = d.cdDelay.front();
-        d.fluxDelay.erase(d.fluxDelay.begin());
-        d.cdDelay.erase(d.cdDelay.begin());
+
+        float alignedFlux = d.fluxDelay[0];
+        float alignedCd = d.cdDelay[0];
+
+        d.fluxDelay[0] = d.fluxDelay[1];
+        d.fluxDelay[1] = flux;
+        
+        d.cdDelay[0] = d.cdDelay[1];
+        d.cdDelay[1] = cd;
 
 
-        // Combine Complex Domain and Spectral Flux
+        // Combine all algorithms
         // Logarithmic combination to balance the scales and enhance peaks
         // 1. Spectral Flux
         // 2. Complex Domain
         // 3. Pitch Flux
 
-        // Thresholds to suppress low-level noise while preserving real onsets
-        float fluxFloor = 0.02f;
-        float cdFloor = 0.8f;
-        float lambda = 10.0f;
+        // Adaptive Noise Gating
+        float fluxOffset = 0.015f; 
+        float cdOffset = 0.05f;    
+        
+        // Calculate dynamic thresholds
+        float fluxThreshold = d.fluxMovingAverage + fluxOffset;
+        float cdThreshold = d.cdMovingAverage + cdOffset;
 
-        alignedFlux = std::max(0.0f, alignedFlux - fluxFloor);
-        alignedCd = std::max(0.0f, alignedCd - cdFloor);
+        // Keep value if it beats the threshold, otherwise 0.0
+        float gatedFlux = (alignedFlux > fluxThreshold) ? (alignedFlux - d.fluxMovingAverage) : 0.0f;
+        float gatedCd = (alignedCd > cdThreshold) ? (alignedCd - d.cdMovingAverage) : 0.0f;
+
+        // Update Moving Averages (Exponential Smoothing)
+        // Alpha controls adaptation speed
+        float alpha = 0.05f; 
+        d.fluxMovingAverage = (alpha * alignedFlux) + ((1.0f - alpha) * d.fluxMovingAverage);
+        d.cdMovingAverage = (alpha * alignedCd) + ((1.0f - alpha) * d.cdMovingAverage);
+
+        float lambda = 10.0f;
         float weightedPitchFlux = 1.5f * pitchFlux;
 
         float combinedNovelty = std::log1p(lambda * (
-                                                    alignedFlux
-                                                  + alignedCd
+                                                    gatedFlux
+                                                  + gatedCd
                                                   + weightedPitchFlux
                                           ));
         
         // DEBUG: raw novelty values in console
-        std::cout << "Spectral Flux: " << alignedFlux << " | CD: " << alignedCd << " | Pitch Flux: " << weightedPitchFlux << " | Combined: " << combinedNovelty << "\n";
+        std::cout << "Spectral Flux: " << gatedFlux << " | CD: " << gatedCd << " | Pitch Flux: " << weightedPitchFlux << " | Combined: " << combinedNovelty << "\n";
         // std::cout << "Current Pitch: " << currentPitch << " Hz | Anchor Pitch: " << d.anchorPitch << " Hz | Unvoiced Frames: " << d.unvoicedFrames << " | Holdoff: " << d.pitchHoldoff << "\n";
         // std::cout << "Time: " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count() << " ms  \n";
 
