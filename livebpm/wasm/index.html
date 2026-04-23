@@ -55,6 +55,9 @@
 
 <script type="module">        
         let audioContext = null;
+        let bpmHistory = [];
+        const maxHistory = 5;
+        let clearDisplayTimeout = null;
 
         window.startAudio = async function() {
             const btn = document.getElementById('startBtn');
@@ -125,11 +128,34 @@
             const confEl = document.getElementById('confidenceFill');
             
             if (data.hasValidEstimate) {
-                bpmEl.textContent = data.bpm.toFixed(1);
+                if (clearDisplayTimeout) {
+                    clearTimeout(clearDisplayTimeout);
+                    clearDisplayTimeout = null;
+                }
+
+                // Update History and Average
+                bpmHistory.push(data.bpm);
+                if (bpmHistory.length > maxHistory) {
+                    bpmHistory.shift(); 
+                }
+                
+                const sum = bpmHistory.reduce((a, b) => a + b, 0);
+                const avgBpm = sum / bpmHistory.length;
+
+                // Update DOM
+                bpmEl.textContent = avgBpm.toFixed(1);
                 confEl.style.width = (data.confidence * 100) + '%';
+
             } else {
-                bpmEl.textContent = '--';
-                confEl.style.width = '0%';
+                // INVALID READING
+                // Start a 2-second countdown to clear the display if there are no valid estimates
+                if (!clearDisplayTimeout) {
+                    clearDisplayTimeout = setTimeout(() => {
+                        bpmHistory = []; 
+                        bpmEl.textContent = '--';
+                        confEl.style.width = '0%';
+                    }, 2000);
+                }
             }
         }
 
