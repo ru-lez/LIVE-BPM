@@ -29,7 +29,6 @@ struct Engine::Impl {
     // FFT working buffers
     std::vector<float> fftWindow;
     std::vector<float> currentMag;
-    std::vector<float> previousMag;       // for spectral flux
     std::vector<float> phase;
 
     // Semitone filter bank state
@@ -38,8 +37,7 @@ struct Engine::Impl {
     std::vector<float> previousBandEnergies;
     int numSemitoneBands = 0;
 
-    // Adaptive gating moving averages
-    float fluxMovingAverage         = 0.0f;
+    // Adaptive gating for semitone flux
     float semitoneFluxMovingAverage = 0.0f;
 
     // Novelty buffer for tempo estimation
@@ -59,7 +57,6 @@ struct Engine::Impl {
           tempo(static_cast<int>(cfg.analysisWindowSeconds * featureRate)),
           fftWindow(fftSize),
           currentMag(numBins, 0.0f),
-          previousMag(numBins, 0.0f),
           phase(numBins, 0.0f)
     {
         // Build filter bank once at startup
@@ -108,16 +105,7 @@ void Engine::processBlock(const float* samples, int numSamples) {
                            d.currentMag.data(),
                            d.phase.data());
 
-        // ============================================================
-        // ONSET DETECTION — TWO COMPLEMENTARY METHODS
-        // ============================================================
-
-        // ---- Spectral Flux (strong on broadband percussive onsets) ----
-        float spectralFlux = dsp::OnsetDetection::spectralFlux(
-            d.currentMag.data(), d.previousMag.data(), d.numBins
-        );
-
-        // ---- Semitone Filter Bank (strong on pitched/legato, vibrato-robust) ----
+        // ---- Semitone Filter Bank Flux (Pertusa & Iñesta 2009) ----
         float semitoneFlux = dsp::OnsetDetection::semitoneFlux(
             d.currentMag.data(),
             d.previousBandEnergies.data(),
@@ -127,54 +115,33 @@ void Engine::processBlock(const float* samples, int numSamples) {
             d.numSemitoneBands
         );
 
-        // ============================================================
-        // ADAPTIVE NOISE GATING
-        // ============================================================
+        // Adaptive noise gate
+        const float gateOffset = 0.005f;
+        float threshold = d.semitoneFluxMovingAverage + gateOffset;
 
-        const float fluxGateOffset     = 0.015f;  // higher — flux noise floor is wider
-        const float semitoneGateOffset = 0.005f;  // lower — normalised signal
-        const float alpha              = 0.05f;   // moving-average adaptation speed
+        float gatedFlux = (semitoneFlux > threshold)
+            ? (semitoneFlux - d.semitoneFluxMovingAverage)
+            : 0.0f;
 
-        float fluxThreshold     = d.fluxMovingAverage         + fluxGateOffset;
-        float semitoneThreshold = d.semitoneFluxMovingAverage + semitoneGateOffset;
-
-        float gatedFlux = (spectralFlux > fluxThreshold)
-            ? (spectralFlux - d.fluxMovingAverage) : 0.0f;
-        float gatedSemitone = (semitoneFlux > semitoneThreshold)
-            ? (semitoneFlux - d.semitoneFluxMovingAverage) : 0.0f;
-
-        // Update moving averages (exponential smoothing)
-        d.fluxMovingAverage =
-            alpha * spectralFlux + (1.0f - alpha) * d.fluxMovingAverage;
+        // Update moving average
+        const float alpha = 0.05f;
         d.semitoneFluxMovingAverage =
             alpha * semitoneFlux + (1.0f - alpha) * d.semitoneFluxMovingAverage;
 
-        // ============================================================
-        // COMBINE NOVELTY SIGNALS
-        // ============================================================
-
-        const float lambda          = 50.0f;
-        const float spectralWeight  = 1.0f;
-        const float semitoneWeight  = 3.0f;  // start point — tune for your material
-
-        float novelty = std::log1p(lambda * (
-                          spectralWeight * gatedFlux
-                        + semitoneWeight * gatedSemitone
-                      ));
-        
+        // Logarithmic compression
+        const float lambda = 50.0f;  // higher because semitoneFlux is normalised [0,1]
+        float novelty = std::log1p(lambda * gatedFlux);
         /*
         #ifdef LIVEBPM_DEBUG
-                std::cout << std::fixed << std::setprecision(4)
-                        << "Flux: "      << gatedFlux
-                        << " | Semi: "   << gatedSemitone
-                        << " | Novelty: "<< novelty << "\n";
+                std::cout << "SemitoneFlux: " << std::fixed << std::setprecision(4)
+                        << semitoneFlux
+                        << " | Avg: " << d.semitoneFluxMovingAverage
+                        << " | Gated: " << gatedFlux
+                        << " | Novelty: " << novelty << "\n";
         #endif
         */
 
-        // ============================================================
-        // STORE NOVELTY + SHIFT STATE FOR NEXT ITERATION
-        // ============================================================
-
+        // Store in novelty buffer
         if (d.noveltyWritePos < d.maxNoveltyLength) {
             d.noveltyBuffer[d.noveltyWritePos] = novelty;
             d.noveltyWritePos++;
@@ -185,19 +152,13 @@ void Engine::processBlock(const float* samples, int numSamples) {
             d.noveltyBuffer.back() = novelty;
         }
 
-        // Shift state for next frame
+        // Shift band energies for next iteration
         std::copy(d.currentBandEnergies.begin(),
                   d.currentBandEnergies.end(),
                   d.previousBandEnergies.begin());
-        std::copy(d.currentMag.begin(),
-                  d.currentMag.end(),
-                  d.previousMag.begin());
     }
 
-    // ============================================================
-    // PERIODIC TEMPO RE-ESTIMATION
-    // ============================================================
-
+    // Re-estimate tempo
     int noveltyLen = std::min(d.noveltyWritePos, d.maxNoveltyLength);
     if (noveltyLen > 50) {
         auto tempoResult = d.tempo.estimate(
