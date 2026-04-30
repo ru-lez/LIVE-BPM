@@ -57,4 +57,33 @@ float OnsetDetection::complexDomain(const float* currentMag, const float* curren
     return cdValue / static_cast<float>(numBins);
 }
 
+float OnsetDetection::logFrequencyFlux(const float* currentMag, 
+                                       const float* previousMag, 
+                                       int numBins, float sampleRate, int fftSize) {
+    // group 1024 FFT bins into ~88 MIDI notes (semitones)
+    float semitoneFlux = 0.0f;
+    float currentSemitoneEnergy[128] = {0.0f};
+    float prevSemitoneEnergy[128] = {0.0f};
+
+    // Map FFT bins to MIDI notes and sum magnitudes within each semitone
+    for (int k = 1; k < numBins; ++k) {
+        float freq = k * sampleRate / fftSize;
+        int midiNote = static_cast<int>(std::round(69.0f + 12.0f * std::log2(freq / 440.0f)));
+        
+        // Only consider MIDI notes in the standard range (0-127)
+        if (midiNote >= 0 && midiNote < 128) {
+            currentSemitoneEnergy[midiNote] += currentMag[k];
+            prevSemitoneEnergy[midiNote] += previousMag[k];
+        }
+    }
+
+    // Calculate spectral flux on the semitone energies
+    for (int i = 0; i < 128; ++i) {
+        float diff = currentSemitoneEnergy[i] - prevSemitoneEnergy[i];
+        if (diff > 0) semitoneFlux += diff;
+    }
+
+    return semitoneFlux / 128.0f;
+}
+
 }} // namespace livebpm::dsp

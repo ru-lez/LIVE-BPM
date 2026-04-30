@@ -14,6 +14,11 @@ public:
     static float complexDomain(const float* currentMag, const float* currentPhase,
                                const float* prevMag, const float* prevPhase,
                                const float* prevPrevPhase, int numBins);
+
+    // Log-Frequency Spectral Flux
+    static float logFrequencyFlux(const float* currentMag, 
+                                  const float* previousMag,
+                                  int numBins, float sampleRate, int fftSize);
 };
 
 

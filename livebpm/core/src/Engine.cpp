@@ -39,9 +39,11 @@ struct Engine::Impl {
     std::vector<float> recentPitches{0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     std::vector<float> fluxDelay{0.0f, 0.0f}; 
     std::vector<float> cdDelay{0.0f, 0.0f};
+    std::vector<float> logDelay{0.0f, 0.0f};
 
     float fluxMovingAverage = 0.0f;
     float cdMovingAverage = 0.0f;
+    float logFluxMovingAverage = 0.0f;
 
     int hopCounter = 0;
     int noveltyWritePos = 0;
@@ -103,7 +105,17 @@ void Engine::processBlock(const float* samples, int numSamples) {
             d.previousMag.data(), d.previousPhase.data(), 
             d.previousPreviousPhase.data(), d.numBins
         );
-        
+
+        // Calculate Log-Frequency Spectral Flux
+        float logFlux = dsp::OnsetDetection::logFrequencyFlux(
+            d.currentMag.data(), 
+            d.previousMag.data(), 
+            d.numBins, 
+            static_cast<float>(d.config.sampleRate), 
+            d.fftSize
+        );
+                
+        // MPM Pitch Tracking
         // Calculate average magnitude (energy) of the current frame
         float frameEnergy = 0.0f;
         for (int k = 0; k < d.numBins; ++k) {
@@ -167,54 +179,55 @@ void Engine::processBlock(const float* samples, int numSamples) {
         }
 
         // Defer novelty calculation by 2 frames to align with the phase-based CD algorithm
-        d.fluxDelay.push_back(flux);
-        d.cdDelay.push_back(cd);
-
         float alignedFlux = d.fluxDelay[0];
         float alignedCd = d.cdDelay[0];
+        float alignedLog = d.logDelay[0];
 
+        // Shift buffers for the next hop
         d.fluxDelay[0] = d.fluxDelay[1];
         d.fluxDelay[1] = flux;
-        
+
         d.cdDelay[0] = d.cdDelay[1];
         d.cdDelay[1] = cd;
+        
+        d.logDelay[0] = d.logDelay[1];
+        d.logDelay[1] = logFlux;
 
 
         // Combine all algorithms
         // Logarithmic combination to balance the scales and enhance peaks
         // 1. Spectral Flux
         // 2. Complex Domain
-        // 3. Pitch Flux
+        // 3. Log-Frequency Spectral Flux
+        // 4. Pitch Flux
 
         // Adaptive Noise Gating
-        float fluxOffset = 0.015f; 
-        float cdOffset = 0.05f;    
-        
-        // Calculate dynamic thresholds
-        float fluxThreshold = d.fluxMovingAverage + fluxOffset;
-        float cdThreshold = d.cdMovingAverage + cdOffset;
-
-        // Keep value if it beats the threshold, otherwise 0.0
-        float gatedFlux = (alignedFlux > fluxThreshold) ? (alignedFlux - d.fluxMovingAverage) : 0.0f;
-        float gatedCd = (alignedCd > cdThreshold) ? (alignedCd - d.cdMovingAverage) : 0.0f;
+        float gatedFlux = std::max(0.0f, alignedFlux - (d.fluxMovingAverage * 1.2f));
+        float gatedCd = std::max(0.0f, alignedCd - (d.cdMovingAverage * 1.5f));
+        float gatedLogFlux = std::max(0.0f, alignedLog - (d.logFluxMovingAverage * 1.1f));
 
         // Update Moving Averages (Exponential Smoothing)
         // Alpha controls adaptation speed
         float alpha = 0.05f; 
         d.fluxMovingAverage = (alpha * alignedFlux) + ((1.0f - alpha) * d.fluxMovingAverage);
         d.cdMovingAverage = (alpha * alignedCd) + ((1.0f - alpha) * d.cdMovingAverage);
+        d.logFluxMovingAverage = (alpha * logFlux) + ((1.0f - alpha) * d.logFluxMovingAverage);
 
-        float lambda = 10.0f;
-        float weightedPitchFlux = 1.5f * pitchFlux;
+        // normalised combination
+        float normFlux = gatedFlux * 8.0f;
+        float normCd = gatedCd * 2.5f;
+        float normLogFlux = gatedLogFlux * 10.0f;
+        float normPitch = pitchFlux * 1.2f;
 
-        float combinedNovelty = std::log1p(lambda * (
-                                                    gatedFlux
-                                                  + gatedCd
-                                                  + weightedPitchFlux
-                                          ));
+        float combinedValue = std::max({normFlux, normCd, normLogFlux, normPitch});
+
+        float lambda = 15.0f;
+        float combinedNovelty = std::log1p(lambda * combinedValue);
         
-        // DEBUG: raw novelty values in console
-        std::cout << "Spectral Flux: " << gatedFlux << " | CD: " << gatedCd << " | Pitch Flux: " << weightedPitchFlux << " | Combined: " << combinedNovelty << "\n";
+        // DEBUG: raw novelty values in console.
+        // Hi Max and Mehearsal! You can view this info in the web browser's console.
+        // Remember to comment this out in production since this is expensive.
+        std::cout << "Spectral Flux: " << normFlux << " | CD: " << normCd << " | Log-Frequency Flux: " << normLogFlux << " | Pitch Flux: " << normPitch << " | Combined: " << combinedNovelty << "\n";
         // std::cout << "Current Pitch: " << currentPitch << " Hz | Anchor Pitch: " << d.anchorPitch << " Hz | Unvoiced Frames: " << d.unvoicedFrames << " | Holdoff: " << d.pitchHoldoff << "\n";
         // std::cout << "Time: " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count() << " ms  \n";
 
