@@ -10,7 +10,7 @@ struct Config {
     int fftOrder = 11; // 2^11 = 2048
     double minBpm = 40.0;
     double maxBpm = 240.0;
-    double analysisWindowSeconds = 6.0;
+    double analysisWindowSeconds = 4.0;
 };
 
 } // namespace livebpm
