@@ -60,3 +60,34 @@ TEST_CASE("BeatTrackingDP: single sample doesn't crash", "[dp]") {
 
     // Not crashing is the success here
 }
+
+TEST_CASE("BeatTrackingDP: Coverage metric calculates correct fraction", "[dp]") {
+    double featureRate = 93.75;
+    // Generate 10 seconds of consistent 120 BPM novelty
+    auto novelty = generatePeriodicNovelty(120.0, featureRate, 10.0);
+    int beatRefLag = static_cast<int>(60.0 / 120.0 * featureRate);
+
+    BeatTrackingDP dp;
+    auto result = dp.track(novelty.data(), static_cast<int>(novelty.size()), beatRefLag);
+
+    // novelty function generates peaks consistently across the entire 10 seconds
+    // the span of beats should cover nearly the entire window length (> 95%)
+    REQUIRE(result.coverage > 0.95);
+}
+
+TEST_CASE("BeatTrackingDP: Penalty factor adjustment processes without errors", "[dp]") {
+    double featureRate = 93.75;
+    auto novelty = generatePeriodicNovelty(120.0, featureRate, 5.0);
+    int beatRefLag = static_cast<int>(60.0 / 120.0 * featureRate);
+
+    BeatTrackingDP dp;
+    
+    // Test with standard penalty factor
+    auto defaultResult = dp.track(novelty.data(), static_cast<int>(novelty.size()), beatRefLag, 1.0);
+    
+    // Test with extremely high penalty factor to enforce rigid spacing
+    auto rigidResult = dp.track(novelty.data(), static_cast<int>(novelty.size()), beatRefLag, 100.0);
+
+    REQUIRE(!defaultResult.beatIndices.empty());
+    REQUIRE(!rigidResult.beatIndices.empty());
+}

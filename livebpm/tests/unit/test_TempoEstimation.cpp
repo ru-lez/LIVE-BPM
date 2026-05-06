@@ -72,3 +72,24 @@ TEST_CASE("TempoEstimation: silence produces weak result", "[tempo]") {
 
     REQUIRE(result.strength < 0.1);
 }
+
+TEST_CASE("TempoEstimation: Bounding constraints enforces minBpm and maxBpm", "[tempo]") {
+    double featureRate = 93.75; 
+    // Signal is 120 BPM
+    auto novelty = generatePeriodicNovelty(120.0, featureRate, 5.0);
+
+    TempoEstimation te(static_cast<int>(novelty.size()));
+    
+    // Limit tempo search to [160.0, 200.0], excluding 120 BPM
+    auto result = te.estimate(
+        novelty.data(),
+        static_cast<int>(novelty.size()),
+        featureRate,
+        160.0, 
+        200.0  
+    );
+
+    // estimated BPM must stay within defined boundary despite the 120 BPM signal
+    REQUIRE(result.bpm >= 160.0);
+    REQUIRE(result.bpm <= 200.0);
+}
