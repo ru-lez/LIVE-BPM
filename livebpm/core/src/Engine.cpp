@@ -1,15 +1,16 @@
 #include "livebpm/Engine.h"
 #include "livebpm/dsp/SpectralAnalysis.h"
 #include "livebpm/dsp/OnsetDetection.h"
-#include "livebpm/dsp/PitchTracking.h"
 #include "livebpm/dsp/TempoEstimation.h"
 #include "livebpm/dsp/BeatTrackingDP.h"
 #include "livebpm/dsp/RingBuffer.h"
-#include <iostream>
 
+#include <iostream>
+#include <iomanip>
 #include <chrono>
 #include <algorithm>
 #include <vector>
+#include <cmath>
 
 namespace livebpm {
 
@@ -25,26 +26,22 @@ struct Engine::Impl {
     dsp::TempoEstimation tempo;
     dsp::BeatTrackingDP beatTracker;
 
-    // Pre-allocated buffers
+    // FFT working buffers
     std::vector<float> fftWindow;
     std::vector<float> currentMag;
-    std::vector<float> previousMag;
     std::vector<float> phase;
-    std::vector<float> previousPhase;
-    std::vector<float> previousPreviousPhase;
+
+    // Semitone filter bank state
+    std::vector<float> filterBank;            // precomputed triangular filters
+    std::vector<float> currentBandEnergies;
+    std::vector<float> previousBandEnergies;
+    int numSemitoneBands = 0;
+
+    // Adaptive gating for semitone flux
+    float semitoneFluxMovingAverage = 0.0f;
+
+    // Novelty buffer for tempo estimation
     std::vector<float> noveltyBuffer;
-    float anchorPitch = 0.0f;
-    int pitchHoldoff = 0;
-    int unvoicedFrames = 0;
-    std::vector<float> recentPitches{0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-    std::vector<float> fluxDelay{0.0f, 0.0f}; 
-    std::vector<float> cdDelay{0.0f, 0.0f};
-    std::vector<float> logDelay{0.0f, 0.0f};
-
-    float fluxMovingAverage = 0.0f;
-    float cdMovingAverage = 0.0f;
-    float logFluxMovingAverage = 0.0f;
-
     int hopCounter = 0;
     int noveltyWritePos = 0;
     int maxNoveltyLength;
@@ -60,13 +57,26 @@ struct Engine::Impl {
           tempo(static_cast<int>(cfg.analysisWindowSeconds * featureRate)),
           fftWindow(fftSize),
           currentMag(numBins, 0.0f),
-          previousMag(numBins, 0.0f),
-          phase(numBins, 0.0f),
-          previousPhase(numBins, 0.0f),
-          previousPreviousPhase(numBins, 0.0f)
+          phase(numBins, 0.0f)
     {
+        // Build filter bank once at startup
+        filterBank = dsp::OnsetDetection::buildSemitoneFilterBank(
+            numBins,
+            static_cast<float>(cfg.sampleRate),
+            fftSize,
+            55.0f,    // A1 lower bound
+            8000.0f   // ~B8 upper bound
+        );
+
+        numSemitoneBands = static_cast<int>(filterBank.size()) / numBins;
+        currentBandEnergies.resize(numSemitoneBands, 0.0f);
+        previousBandEnergies.resize(numSemitoneBands, 0.0f);
+
         maxNoveltyLength = static_cast<int>(cfg.analysisWindowSeconds * featureRate);
         noveltyBuffer.resize(maxNoveltyLength, 0.0f);
+
+        std::cout << "[Engine] Initialised semitone filter bank: "
+                  << numSemitoneBands << " bands\n";
     }
 };
 
@@ -84,179 +94,80 @@ void Engine::processBlock(const float* samples, int numSamples) {
     d.ringBuffer.write(samples, numSamples);
     d.hopCounter += numSamples;
 
-    // Process each time we accumulate a complete hop
     while (d.hopCounter >= d.hopSize && d.ringBuffer.available() >= d.fftSize) {
         d.hopCounter -= d.hopSize;
 
-        // Read FFT window from ring buffer
+        // Read FFT window
         d.ringBuffer.readLatest(d.fftWindow.data(), d.fftSize);
 
         // FFT
-        d.spectral.compute(d.fftWindow.data(), d.currentMag.data(), d.phase.data());
+        d.spectral.compute(d.fftWindow.data(),
+                           d.currentMag.data(),
+                           d.phase.data());
 
-        // Calculate Spectral Flux
-        float flux = dsp::OnsetDetection::spectralFlux(
-            d.currentMag.data(), d.previousMag.data(), d.numBins
+        // ---- Semitone Filter Bank Flux (Pertusa & Iñesta 2009) ----
+        float semitoneFlux = dsp::OnsetDetection::semitoneFlux(
+            d.currentMag.data(),
+            d.previousBandEnergies.data(),
+            d.currentBandEnergies.data(),
+            d.filterBank.data(),
+            d.numBins,
+            d.numSemitoneBands
         );
 
-        // Calculate Complex Domain
-        float cd = dsp::OnsetDetection::complexDomain(
-            d.currentMag.data(), d.phase.data(), 
-            d.previousMag.data(), d.previousPhase.data(), 
-            d.previousPreviousPhase.data(), d.numBins
-        );
+        // Adaptive noise gate
+        const float gateOffset = 0.005f;
+        float threshold = d.semitoneFluxMovingAverage + gateOffset;
 
-        // Calculate Log-Frequency Spectral Flux
-        float logFlux = dsp::OnsetDetection::logFrequencyFlux(
-            d.currentMag.data(), 
-            d.previousMag.data(), 
-            d.numBins, 
-            static_cast<float>(d.config.sampleRate), 
-            d.fftSize
-        );
-                
-        // MPM Pitch Tracking
-        // Calculate average magnitude (energy) of the current frame
-        float frameEnergy = 0.0f;
-        for (int k = 0; k < d.numBins; ++k) {
-            frameEnergy += d.currentMag[k];
-        }
-        frameEnergy /= static_cast<float>(d.numBins);
+        float gatedFlux = (semitoneFlux > threshold)
+            ? (semitoneFlux - d.semitoneFluxMovingAverage)
+            : 0.0f;
 
-        // Get raw pitch from MPM
-        // Only evaluate pitch if the frame has enough energy to be a real instrument
-        float rawPitch = 0.0f;
-        if (frameEnergy > 0.005f) { 
-            rawPitch = dsp::PitchTracking::estimatePitchMPM(
-                d.fftWindow.data(), d.fftSize, static_cast<float>(d.config.sampleRate)
-            );
-        }
-        
-        // Apply 5-point Median Filter to eliminate 1-frame octave glitches
-        d.recentPitches[0] = d.recentPitches[1];
-        d.recentPitches[1] = d.recentPitches[2];
-        d.recentPitches[2] = d.recentPitches[3];
-        d.recentPitches[3] = d.recentPitches[4];
-        d.recentPitches[4] = rawPitch;
-        
-        std::vector<float> sortedPitches = d.recentPitches;
-        std::sort(sortedPitches.begin(), sortedPitches.end());
-        float currentPitch = sortedPitches[2];
-        
-        float pitchFlux = 0.0f;
-        
-        // Decrement holdoff timer
-        if (d.pitchHoldoff > 0) {
-            d.pitchHoldoff--;
-        }
-        
-        // Check filtered pitch
-        if (currentPitch > 0.0f) {
-            d.unvoicedFrames = 0; 
+        // Update moving average
+        const float alpha = 0.05f;
+        d.semitoneFluxMovingAverage =
+            alpha * semitoneFlux + (1.0f - alpha) * d.semitoneFluxMovingAverage;
 
-            if (d.anchorPitch == 0.0f) {
-                d.anchorPitch = currentPitch; 
-            } else {
-                float currentMidi = 69.0f + 12.0f * std::log2(currentPitch / 440.0f);
-                float anchorMidi = 69.0f + 12.0f * std::log2(d.anchorPitch / 440.0f);
-                float midiDiff = std::abs(currentMidi - anchorMidi);
-                
-                if (midiDiff > 1.25f) { 
-                    if (d.pitchHoldoff == 0) {
-                        pitchFlux = 1.0f; 
-                        d.pitchHoldoff = 12; 
-                    }
-                    d.anchorPitch = currentPitch; 
-                } else {
-                    d.anchorPitch = (0.95f * d.anchorPitch) + (0.05f * currentPitch);
-                }
-            }
-        } else {
-            d.unvoicedFrames++;
-            if (d.unvoicedFrames > 5) {
-                d.anchorPitch = 0.0f;
-            }
-        }
+        // Logarithmic compression
+        const float lambda = 50.0f;  // higher because semitoneFlux is normalised [0,1]
+        float novelty = std::log1p(lambda * gatedFlux);
+        /*
+        #ifdef LIVEBPM_DEBUG
+                std::cout << "SemitoneFlux: " << std::fixed << std::setprecision(4)
+                        << semitoneFlux
+                        << " | Avg: " << d.semitoneFluxMovingAverage
+                        << " | Gated: " << gatedFlux
+                        << " | Novelty: " << novelty << "\n";
+        #endif
+        */
 
-        // Defer novelty calculation by 2 frames to align with the phase-based CD algorithm
-        float alignedFlux = d.fluxDelay[0];
-        float alignedCd = d.cdDelay[0];
-        float alignedLog = d.logDelay[0];
-
-        // Shift buffers for the next hop
-        d.fluxDelay[0] = d.fluxDelay[1];
-        d.fluxDelay[1] = flux;
-
-        d.cdDelay[0] = d.cdDelay[1];
-        d.cdDelay[1] = cd;
-        
-        d.logDelay[0] = d.logDelay[1];
-        d.logDelay[1] = logFlux;
-
-
-        // Combine all algorithms
-        // Logarithmic combination to balance the scales and enhance peaks
-        // 1. Spectral Flux
-        // 2. Complex Domain
-        // 3. Log-Frequency Spectral Flux
-        // 4. Pitch Flux
-
-        // Adaptive Noise Gating
-        float gatedFlux = std::max(0.0f, alignedFlux - (d.fluxMovingAverage * 1.2f));
-        float gatedCd = std::max(0.0f, alignedCd - (d.cdMovingAverage * 1.5f));
-        float gatedLogFlux = std::max(0.0f, alignedLog - (d.logFluxMovingAverage * 1.1f));
-
-        // Update Moving Averages (Exponential Smoothing)
-        // Alpha controls adaptation speed
-        float alpha = 0.05f; 
-        d.fluxMovingAverage = (alpha * alignedFlux) + ((1.0f - alpha) * d.fluxMovingAverage);
-        d.cdMovingAverage = (alpha * alignedCd) + ((1.0f - alpha) * d.cdMovingAverage);
-        d.logFluxMovingAverage = (alpha * logFlux) + ((1.0f - alpha) * d.logFluxMovingAverage);
-
-        // normalised combination
-        float normFlux = gatedFlux * 8.0f;
-        float normCd = gatedCd * 2.5f;
-        float normLogFlux = gatedLogFlux * 10.0f;
-        float normPitch = pitchFlux * 1.2f;
-
-        float combinedValue = std::max({normFlux, normCd, normLogFlux, normPitch});
-
-        float lambda = 15.0f;
-        float combinedNovelty = std::log1p(lambda * combinedValue);
-        
-        // DEBUG: raw novelty values in console.
-        // Hi Max and Mehearsal! You can view this info in the web browser's console.
-        // Remember to comment this out in production since this is expensive.
-        std::cout << "Spectral Flux: " << normFlux << " | CD: " << normCd << " | Log-Frequency Flux: " << normLogFlux << " | Pitch Flux: " << normPitch << " | Combined: " << combinedNovelty << "\n";
-        // std::cout << "Current Pitch: " << currentPitch << " Hz | Anchor Pitch: " << d.anchorPitch << " Hz | Unvoiced Frames: " << d.unvoicedFrames << " | Holdoff: " << d.pitchHoldoff << "\n";
-        // std::cout << "Time: " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count() << " ms  \n";
-
-        // Store in novelty buffer (circular)
+        // Store in novelty buffer
         if (d.noveltyWritePos < d.maxNoveltyLength) {
-            d.noveltyBuffer[d.noveltyWritePos] = combinedNovelty;
+            d.noveltyBuffer[d.noveltyWritePos] = novelty;
             d.noveltyWritePos++;
         } else {
-            // Shift left
-            std::move(d.noveltyBuffer.begin() + 1, d.noveltyBuffer.end(), d.noveltyBuffer.begin());
-            d.noveltyBuffer.back() = combinedNovelty;
+            std::move(d.noveltyBuffer.begin() + 1,
+                      d.noveltyBuffer.end(),
+                      d.noveltyBuffer.begin());
+            d.noveltyBuffer.back() = novelty;
         }
 
-        // Shift phase and magnitude buffers for next iteration
-        std::copy(d.previousPhase.begin(), d.previousPhase.end(), d.previousPreviousPhase.begin());
-        std::copy(d.phase.begin(), d.phase.end(), d.previousPhase.begin());
-        std::copy(d.currentMag.begin(), d.currentMag.end(), d.previousMag.begin());
+        // Shift band energies for next iteration
+        std::copy(d.currentBandEnergies.begin(),
+                  d.currentBandEnergies.end(),
+                  d.previousBandEnergies.begin());
     }
 
-    // Re-estimate tempo periodically (not on every hop)
+    // Re-estimate tempo
     int noveltyLen = std::min(d.noveltyWritePos, d.maxNoveltyLength);
-    if (noveltyLen > 50) { // Minimum ~0.5 seconds of data
+    if (noveltyLen > 50) {
         auto tempoResult = d.tempo.estimate(
-            d.noveltyBuffer.data(), noveltyLen, d.featureRate, d.config.minBpm, d.config.maxBpm
+            d.noveltyBuffer.data(), noveltyLen,
+            d.featureRate, d.config.minBpm, d.config.maxBpm
         );
 
         if (tempoResult.bpm > 0) {
             int beatRefLag = static_cast<int>(60.0 / tempoResult.bpm * d.featureRate);
-
             auto dpResult = d.beatTracker.track(d.noveltyBuffer.data(), noveltyLen, beatRefLag);
 
             Result result;
@@ -267,7 +178,8 @@ void Engine::processBlock(const float* samples, int numSamples) {
             result.hasValidEstimate = (result.confidence > 0.2);
 
             auto end = std::chrono::high_resolution_clock::now();
-            result.processingTimeMs = std::chrono::duration<double, std::milli>(end - start).count();
+            result.processingTimeMs =
+                std::chrono::duration<double, std::milli>(end - start).count();
 
             latestResult_ = result;
         }

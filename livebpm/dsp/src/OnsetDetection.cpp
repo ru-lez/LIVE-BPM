@@ -1,6 +1,8 @@
 #include "livebpm/dsp/OnsetDetection.h"
 #include <cmath>
 #include <algorithm>
+#include <vector>
+
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -57,33 +59,88 @@ float OnsetDetection::complexDomain(const float* currentMag, const float* curren
     return cdValue / static_cast<float>(numBins);
 }
 
-float OnsetDetection::logFrequencyFlux(const float* currentMag, 
-                                       const float* previousMag, 
-                                       int numBins, float sampleRate, int fftSize) {
-    // group 1024 FFT bins into ~88 MIDI notes (semitones)
-    float semitoneFlux = 0.0f;
-    float currentSemitoneEnergy[128] = {0.0f};
-    float prevSemitoneEnergy[128] = {0.0f};
 
-    // Map FFT bins to MIDI notes and sum magnitudes within each semitone
-    for (int k = 1; k < numBins; ++k) {
-        float freq = k * sampleRate / fftSize;
-        int midiNote = static_cast<int>(std::round(69.0f + 12.0f * std::log2(freq / 440.0f)));
-        
-        // Only consider MIDI notes in the standard range (0-127)
-        if (midiNote >= 0 && midiNote < 128) {
-            currentSemitoneEnergy[midiNote] += currentMag[k];
-            prevSemitoneEnergy[midiNote] += previousMag[k];
+float OnsetDetection::semitoneFlux(const float* currentMag,
+                                    const float* previousBandEnergies,
+                                    float* outBandEnergies,
+                                    const float* filterBank,
+                                    int numBins,
+                                    int numBands)
+{
+    // Step 1: Apply each triangular filter to get band energies
+    // b_i = sqrt( sum_k (|X[k]| * |H_i[k]|)^2 )
+    for (int i = 0; i < numBands; ++i) {
+        const float* filter = &filterBank[i * numBins];
+        float sumSquared = 0.0f;
+        for (int k = 0; k < numBins; ++k) {
+            float v = currentMag[k] * filter[k];
+            sumSquared += v * v;
+        }
+        outBandEnergies[i] = std::sqrt(sumSquared);
+    }
+
+    // Step 2: Compute positive first-order derivatives across all bands
+    // a[t] = sum max(0, b_i[t] - b_i[t-1])
+    float positiveDerivatives = 0.0f;
+    float totalEnergy = 0.0f;
+    for (int i = 0; i < numBands; ++i) {
+        float diff = outBandEnergies[i] - previousBandEnergies[i];
+        if (diff > 0.0f) {
+            positiveDerivatives += diff;
+        }
+        totalEnergy += outBandEnergies[i];
+    }
+
+    // Step 3: Normalise by total band energy (paper's o[t] = a[t] / s[t])
+    if (totalEnergy < 1e-6f) return 0.0f;
+    return positiveDerivatives / totalEnergy;
+}
+
+// Build the triangular semitone filter bank
+// Each filter is centred on a musical pitch frequency.
+// Returns numBands filters, each of size numBins.
+//
+// Layout: filterBank[i * numBins + k] is filter i, bin k
+std::vector<float> OnsetDetection::buildSemitoneFilterBank(
+    int numBins, float sampleRate, int fftSize,
+    float minFreqHz, float maxFreqHz)
+{
+    // Calculate how many semitones fit between min and max
+    int numBands = static_cast<int>(
+        std::round(12.0f * std::log2(maxFreqHz / minFreqHz))
+    );
+
+    std::vector<float> filterBank(numBands * numBins, 0.0f);
+
+    float binHz = sampleRate / fftSize;
+
+    for (int i = 0; i < numBands; ++i) {
+        // Center frequency of this band (semitone i above minFreqHz)
+        float centerHz = minFreqHz * std::pow(2.0f, i / 12.0f);
+
+        // Lower and upper edges (one semitone below/above center)
+        float lowerHz = minFreqHz * std::pow(2.0f, (i - 1) / 12.0f);
+        float upperHz = minFreqHz * std::pow(2.0f, (i + 1) / 12.0f);
+
+        // Build the triangular filter for this band
+        for (int k = 0; k < numBins; ++k) {
+            float binFreq = k * binHz;
+
+            if (binFreq < lowerHz || binFreq > upperHz) {
+                filterBank[i * numBins + k] = 0.0f;
+            } else if (binFreq <= centerHz) {
+                // Rising edge of triangle
+                filterBank[i * numBins + k] =
+                    (binFreq - lowerHz) / (centerHz - lowerHz);
+            } else {
+                // Falling edge of triangle
+                filterBank[i * numBins + k] =
+                    (upperHz - binFreq) / (upperHz - centerHz);
+            }
         }
     }
 
-    // Calculate spectral flux on the semitone energies
-    for (int i = 0; i < 128; ++i) {
-        float diff = currentSemitoneEnergy[i] - prevSemitoneEnergy[i];
-        if (diff > 0) semitoneFlux += diff;
-    }
-
-    return semitoneFlux / 128.0f;
+    return filterBank;
 }
 
 }} // namespace livebpm::dsp
