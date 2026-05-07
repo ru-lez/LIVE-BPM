@@ -53,8 +53,8 @@ TEST_CASE("TempoEstimation: 180 BPM synthetic novelty", "[tempo]") {
         240.0
     );
 
-    REQUIRE(result.bpm > 170.0);
-    REQUIRE(result.bpm < 190.0);
+    REQUIRE(result.bpm > 175.0);
+    REQUIRE(result.bpm < 185.0);
 }
 
 TEST_CASE("TempoEstimation: silence produces weak result", "[tempo]") {

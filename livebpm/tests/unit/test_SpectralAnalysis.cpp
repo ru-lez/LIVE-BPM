@@ -98,7 +98,7 @@ TEST_CASE("SpectralAnalysis: impulse distributes energy across all bins", "[spec
     std::vector<float> impulse(fftSize, 0.0f);
     
     // Create an impulse at the start of window
-    impulse[0] = 1.0f; 
+    impulse[fftSize / 2] = 1.0f; 
 
     std::vector<float> magnitude(sa.getNumBins());
     std::vector<float> phase(sa.getNumBins());
