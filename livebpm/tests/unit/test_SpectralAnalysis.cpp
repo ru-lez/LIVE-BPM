@@ -91,3 +91,28 @@ TEST_CASE("SpectralAnalysis: DC signal produces energy only in bin 0", "[spectra
     float highBinMag = magnitude[sa.getNumBins() / 2];
     REQUIRE(dcMag > highBinMag * 10.0f);
 }
+
+TEST_CASE("SpectralAnalysis: impulse distributes energy across all bins", "[spectral]") {
+    const int fftSize = 1024;
+    SpectralAnalysis sa(fftSize);
+    std::vector<float> impulse(fftSize, 0.0f);
+    
+    // Create an impulse at the start of window
+    impulse[0] = 1.0f; 
+
+    std::vector<float> magnitude(sa.getNumBins());
+    std::vector<float> phase(sa.getNumBins());
+
+    sa.compute(impulse.data(), magnitude.data(), phase.data());
+    
+    // Energy must be present in all bins
+    bool allBinsHaveEnergy = true;
+    for (int k = 0; k < sa.getNumBins(); ++k) {
+        if (magnitude[k] < 1e-6f) {
+            allBinsHaveEnergy = false;
+            break;
+        }
+    }
+    
+    REQUIRE(allBinsHaveEnergy);
+}

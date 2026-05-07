@@ -51,6 +51,7 @@ add_executable(livebpm_tests
     tests/unit/test_BeatTrackingDP.cpp
     tests/unit/test_FullPipeline.cpp
     tests/unit/test_OnsetDetection.cpp
+    tests/unit/test_RingBuffer.cpp
     tests/unit/test_SpectralAnalysis.cpp
     tests/unit/test_TempoEstimation.cpp
 )

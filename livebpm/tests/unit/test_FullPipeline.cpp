@@ -36,3 +36,39 @@ TEST_CASE("Full pipeline: 120 BPM click track", "[integration]") {
     // Reasonable confidence
     REQUIRE(result.confidence > 0.3);
 }
+
+TEST_CASE("Engine: reset clears internal state and the latest result", "[engine][reset]") {
+    Config config;
+    config.sampleRate = 48000;
+    config.blockSize = 512;
+
+    Engine engine(config);
+
+    // Generate 5 seconds of click track at 120 BPM
+    auto signal = generateClickTrack(120.0, config.sampleRate, 5.0);
+
+    // Feed block by block
+    for (
+        size_t offset = 0;
+        offset + config.blockSize <= signal.size();
+        offset += config.blockSize
+    ) {
+        engine.processBlock(&signal[offset], config.blockSize);
+    }
+
+    // Verify engine holds a valid result
+    auto resultBefore = engine.getLatestResult();
+    REQUIRE(resultBefore.hasValidEstimate == true);
+    REQUIRE(resultBefore.bpm > 0.0);
+
+    // Trigger reset
+    engine.reset();
+
+    // Get result post-reset
+    auto resultAfter = engine.getLatestResult();
+
+    // Verify state is completely cleared
+    REQUIRE(resultAfter.hasValidEstimate == false);
+    REQUIRE(resultAfter.bpm == 0.0);
+    REQUIRE(resultAfter.confidence == 0.0);
+}

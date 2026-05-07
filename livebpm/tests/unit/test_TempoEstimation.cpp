@@ -93,3 +93,14 @@ TEST_CASE("TempoEstimation: Bounding constraints enforces minBpm and maxBpm", "[
     REQUIRE(result.bpm >= 160.0);
     REQUIRE(result.bpm <= 200.0);
 }
+
+TEST_CASE("TempoEstimation: estimate returns empty result if length is less than 2", "[tempo]") {
+    TempoEstimation te(1024);
+    float singleSample = 1.0f;
+    
+    auto result = te.estimate(&singleSample, 1, 93.75, 40.0, 240.0);
+    
+    // Aborted estimation should return default TempoResult (0.0 BPM)
+    REQUIRE(result.bpm == 0.0);
+    REQUIRE(result.strength == 0.0);
+}
