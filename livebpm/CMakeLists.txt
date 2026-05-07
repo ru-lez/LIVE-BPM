@@ -19,7 +19,6 @@ target_include_directories(kissfft PUBLIC extern/kissfft)
 add_library(livebpm_dsp
     dsp/src/SpectralAnalysis.cpp
     dsp/src/OnsetDetection.cpp
-    dsp/src/PitchTracking.cpp
     dsp/src/TempoEstimation.cpp
     dsp/src/BeatTrackingDP.cpp
 )

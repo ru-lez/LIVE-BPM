@@ -17,20 +17,6 @@ static float princarg(float phase) {
     return phase;
 }
 
-float OnsetDetection::spectralFlux(const float* currentMag,
-                                   const float* previousMag, 
-                                   int numBins) {
-    float flux = 0.0f;
-    for (int k = 0; k < numBins; ++k) {
-        float diff = currentMag[k] - previousMag[k];
-        // Half-wave rectification, only care about energy increases
-        if (diff > 0.0f) {
-            flux += diff;
-        }
-    }
-    return flux / static_cast<float>(numBins);
-}
-
 // Complex Domain Onset Detection
 // Detects onsets by measuring the Euclidean distance between the predicted complex bin and the actual measured complex bin.
 float OnsetDetection::complexDomain(const float* currentMag, const float* currentPhase,
