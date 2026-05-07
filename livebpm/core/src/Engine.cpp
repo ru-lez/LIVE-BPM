@@ -29,16 +29,24 @@ struct Engine::Impl {
     // FFT working buffers
     std::vector<float> fftWindow;
     std::vector<float> currentMag;
+    std::vector<float> previousMag;          // for complex domain
     std::vector<float> phase;
+    std::vector<float> previousPhase;        // for complex domain
+    std::vector<float> previousPreviousPhase; // for complex domain
 
     // Semitone filter bank state
-    std::vector<float> filterBank;            // precomputed triangular filters
+    std::vector<float> filterBank;
     std::vector<float> currentBandEnergies;
     std::vector<float> previousBandEnergies;
     int numSemitoneBands = 0;
 
-    // Adaptive gating for semitone flux
+    // Adaptive gating - independent moving averages per stream
     float semitoneFluxMovingAverage = 0.0f;
+    float complexFluxMovingAverage = 0.0f;
+
+    // Warm-up counter so we don't fuse with garbage moving averages
+    int hopsProcessed = 0;
+    static constexpr int warmupHops = 50;
 
     // Novelty buffer for tempo estimation
     std::vector<float> noveltyBuffer;
@@ -57,7 +65,10 @@ struct Engine::Impl {
           tempo(static_cast<int>(cfg.analysisWindowSeconds * featureRate)),
           fftWindow(fftSize),
           currentMag(numBins, 0.0f),
-          phase(numBins, 0.0f)
+          previousMag(numBins, 0.0f),
+          phase(numBins, 0.0f),
+          previousPhase(numBins, 0.0f),
+          previousPreviousPhase(numBins, 0.0f)
     {
         // Build filter bank once at startup
         filterBank = dsp::OnsetDetection::buildSemitoneFilterBank(
@@ -77,6 +88,7 @@ struct Engine::Impl {
 
         std::cout << "[Engine] Initialised semitone filter bank: "
                   << numSemitoneBands << " bands\n";
+        std::cout << "[Engine] Onset detection: semitone flux + complex domain (fused)\n";
     }
 };
 
@@ -105,7 +117,9 @@ void Engine::processBlock(const float* samples, int numSamples) {
                            d.currentMag.data(),
                            d.phase.data());
 
-        // ---- Semitone Filter Bank Flux (Pertusa & Iñesta 2009) ----
+        // ---- Stream 1: Semitone Filter Bank Flux (Pertusa & Iñesta 2009) ----
+        // Robust to vibrato and minor harmonic drift. Strong on percussion and
+        // articulated harmonic instruments. Output is normalised to ~[0, 1].
         float semitoneFlux = dsp::OnsetDetection::semitoneFlux(
             d.currentMag.data(),
             d.previousBandEnergies.data(),
@@ -115,29 +129,66 @@ void Engine::processBlock(const float* samples, int numSamples) {
             d.numSemitoneBands
         );
 
-        // Adaptive noise gate
-        const float gateOffset = 0.005f;
-        float threshold = d.semitoneFluxMovingAverage + gateOffset;
+        // ---- Stream 2: Complex Domain (Duxbury et al. 2003) ----
+        // Catches phase-only onsets that magnitude-based detectors miss
+        // (bowed strings transitioning notes, sustained vocals).
+        // Raw scale depends on signal amplitude - normalised below.
+        float complexFlux = dsp::OnsetDetection::complexDomain(
+            d.currentMag.data(),
+            d.phase.data(),
+            d.previousMag.data(),
+            d.previousPhase.data(),
+            d.previousPreviousPhase.data(),
+            d.numBins
+        );
 
-        float gatedFlux = (semitoneFlux > threshold)
+        // ---- Adaptive gating - each stream against its own moving average ----
+        const float gateOffset = 0.005f;
+        const float alpha = 0.05f;
+
+        float semitoneThreshold = d.semitoneFluxMovingAverage + gateOffset;
+        float gatedSemitone = (semitoneFlux > semitoneThreshold)
             ? (semitoneFlux - d.semitoneFluxMovingAverage)
             : 0.0f;
-
-        // Update moving average
-        const float alpha = 0.05f;
         d.semitoneFluxMovingAverage =
             alpha * semitoneFlux + (1.0f - alpha) * d.semitoneFluxMovingAverage;
 
+        float complexThreshold = d.complexFluxMovingAverage + gateOffset;
+        float gatedComplex = (complexFlux > complexThreshold)
+            ? (complexFlux - d.complexFluxMovingAverage)
+            : 0.0f;
+        d.complexFluxMovingAverage =
+            alpha * complexFlux + (1.0f - alpha) * d.complexFluxMovingAverage;
+
+        // ---- Normalise complex stream to comparable scale ----
+        // Semitone flux is bounded [0, 1]; complex domain isn't. Dividing by
+        // its moving average puts both streams on roughly equal footing.
+        const float epsilon = 1e-6f;
+        float normalisedComplex = gatedComplex / (d.complexFluxMovingAverage + epsilon);
+        // Clamp to prevent blow-ups when moving average is still warming up
+        normalisedComplex = std::min(normalisedComplex, 1.0f);
+
+        // ---- Fuse the two streams ----
+        // Weighted sum - semitone flux leads (more reliable, well-bounded);
+        // complex domain contributes legato/phase-onset information.
+        // During warm-up, rely on semitone flux only since complex MA is unreliable.
+        float combinedFlux;
+        if (d.hopsProcessed < d.warmupHops) {
+            combinedFlux = gatedSemitone;
+        } else {
+            combinedFlux = 0.6f * gatedSemitone + 0.4f * normalisedComplex;
+        }
+
         // Logarithmic compression
-        const float lambda = 50.0f;  // higher because semitoneFlux is normalised [0,1]
-        float novelty = std::log1p(lambda * gatedFlux);
+        const float lambda = 50.0f;
+        float novelty = std::log1p(lambda * combinedFlux);
+
         /*
         #ifdef LIVEBPM_DEBUG
-                std::cout << "SemitoneFlux: " << std::fixed << std::setprecision(4)
-                        << semitoneFlux
-                        << " | Avg: " << d.semitoneFluxMovingAverage
-                        << " | Gated: " << gatedFlux
-                        << " | Novelty: " << novelty << "\n";
+                std::cout << "Semi: " << std::fixed << std::setprecision(4) << gatedSemitone
+                          << " | Cplx: " << normalisedComplex
+                          << " | Combined: " << combinedFlux
+                          << " | Novelty: " << novelty << "\n";
         #endif
         */
 
@@ -152,10 +203,26 @@ void Engine::processBlock(const float* samples, int numSamples) {
             d.noveltyBuffer.back() = novelty;
         }
 
-        // Shift band energies for next iteration
+        // ---- Shift state for next iteration ----
+        // Band energies (for semitone flux)
         std::copy(d.currentBandEnergies.begin(),
                   d.currentBandEnergies.end(),
                   d.previousBandEnergies.begin());
+
+        // Magnitude (for complex domain)
+        std::copy(d.currentMag.begin(),
+                  d.currentMag.end(),
+                  d.previousMag.begin());
+
+        // Phase history (two frames back, for complex domain)
+        std::copy(d.previousPhase.begin(),
+                  d.previousPhase.end(),
+                  d.previousPreviousPhase.begin());
+        std::copy(d.phase.begin(),
+                  d.phase.end(),
+                  d.previousPhase.begin());
+
+        d.hopsProcessed++;
     }
 
     // Re-estimate tempo
