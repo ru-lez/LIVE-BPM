@@ -1,4 +1,4 @@
-# LIVEBPM by MEHEARSAL
+# LIVEBPM by MUSE SCENE LAB
 
 A real-time BPM (Beats Per Minute) detector written in C++. It runs as both a native console application capturing microphone input and a browser-based tool via WebAssembly (WASM).
 
