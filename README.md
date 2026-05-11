@@ -55,7 +55,8 @@ emcc --version
 ### 2. Compile to WASM
 From the `livebpm` project root, run
 ```bash
-mkdir build-wasm && cd build-wasm
+mkdir build-wasm
+cd build-wasm
 emcmake cmake ..
 cmake --build .
 ```
@@ -131,7 +132,10 @@ Audio
 
 
 ## Known Limitations
-* TODO
+* BPM of Legato instruments may take a few seconds to intially recognise (up to 4 seconds).
+* LiveBPM may have a variable offset of ~1 BPM. (e.g. 120BPM may be displayed as 119.7 BPM).
+* LiveBPM may latch onto background noise during musical rests/silence.
+* TODO. Manmohan, any ideas?
 
 
 ## Authors
