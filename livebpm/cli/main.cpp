@@ -11,6 +11,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <cmath>
 
 // Globals
 
@@ -232,6 +233,13 @@ int main(int argc, char* argv[])
 
     std::signal(SIGINT, signalHandler);
 
+    double currentDisplayBpm = 0.0;
+    double lastPrintedBpm = 0.0;
+
+    const double ALPHA = 0.15;
+    const double CONF_THRESHOLD = 0.45;
+    const double VISUAL_DEADZONE = 0.2;
+
     // --- Main display loop (10 fps) ---
     while (running.load()) {
         auto bpmResult = engine.getLatestResult();
@@ -239,9 +247,28 @@ int main(int argc, char* argv[])
         std::cout << "\r";
 
         if (bpmResult.hasValidEstimate) {
+            if (bpmResult.confidence >= CONF_THRESHOLD) {
+                if (currentDisplayBpm == 0.0) {
+                    currentDisplayBpm = bpmResult.bpm;
+                }
+                currentDisplayBpm = (ALPHA * bpmResult.bpm) + ((1.0 - ALPHA) * currentDisplayBpm);
+            }
+
+            double targetDisplayValue = currentDisplayBpm;
+
+            if (lastPrintedBpm != 0.0) {
+                if (std::abs(targetDisplayValue - lastPrintedBpm) < VISUAL_DEADZONE) {
+                    targetDisplayValue = lastPrintedBpm; // Lock to the current display to stop jitter
+                } else {
+                    lastPrintedBpm = targetDisplayValue; // Value exceeded deadzone, update display
+                }
+            } else {
+                lastPrintedBpm = targetDisplayValue;
+            }
+
             std::cout << "  BPM: "
                       << std::fixed << std::setprecision(1) << std::setw(6)
-                      << bpmResult.bpm
+                      << targetDisplayValue
                       << "  |  Confidence: "
                       << std::setprecision(0) << std::setw(3)
                       << (bpmResult.confidence * 100) << "%"

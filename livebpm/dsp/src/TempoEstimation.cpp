@@ -82,6 +82,13 @@ TempoResult TempoEstimation::estimate(const float* novelty, int length,
         double score = 1.0 * autocorr_[lag];
         if (lag * 2 < length) score += 0.6  * autocorr_[lag * 2];
         if (lag * 3 < length) score += 0.25 * autocorr_[lag * 3];
+
+        // Perceptual resonance weighting (Log-Gaussian)
+        // Centers the algorithm's bias around a natural 120 BPM to suppress double-time jumps
+        double currentBpm = 60.0 * featureRate / lag;
+        double weight = std::exp(-0.5 * std::pow(std::log2(currentBpm / 100.0) / 1.1, 2.0));
+        score *= weight;
+
         if (score > bestScore) {
             bestScore = score;
             bestLag   = lag;

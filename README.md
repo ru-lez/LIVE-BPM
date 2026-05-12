@@ -133,7 +133,7 @@ Audio
 
 ## Known Limitations
 * BPM of Legato instruments may take a few seconds to intially recognise (up to 4 seconds).
-* LiveBPM may have a variable offset of ~1 BPM. (e.g. 120BPM may be displayed as 119.7 BPM).
+* LiveBPM may have a variable offset of ~1-3 BPM. (e.g. 120 BPM may be detected as 119.6 BPM).
 * LiveBPM may latch onto background noise during musical rests/silence.
 * TODO. Manmohan, any ideas?
 

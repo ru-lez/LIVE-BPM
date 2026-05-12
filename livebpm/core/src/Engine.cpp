@@ -54,6 +54,10 @@ struct Engine::Impl {
     int noveltyWritePos = 0;
     int maxNoveltyLength;
 
+    // Tempo hysteresis: hold the last stable BPM to prevent erratic jumps when the signal is weak or ambiguous
+    double currentStableBpm = 0.0;
+    int octaveMismatchCount = 0;
+
     Impl(const Config& cfg)
         : config(cfg),
           fftSize(1 << cfg.fftOrder),
@@ -143,8 +147,8 @@ void Engine::processBlock(const float* samples, int numSamples) {
         );
 
         // ---- Adaptive gating - each stream against its own moving average ----
-        const float gateOffset = 0.005f;
-        const float alpha = 0.05f;
+        const float gateOffset = 0.015f;
+        const float alpha = 0.1f;
 
         float semitoneThreshold = d.semitoneFluxMovingAverage + gateOffset;
         float gatedSemitone = (semitoneFlux > semitoneThreshold)
@@ -234,6 +238,47 @@ void Engine::processBlock(const float* samples, int numSamples) {
         );
 
         if (tempoResult.bpm > 0) {
+            // Octave Error Correction with Escape Hatc
+            if (d.currentStableBpm > 0.0) {
+                bool isOctaveError = false;
+
+                // Defending against double-time jumps (e.g. 60 jumping to 120)
+                if (std::abs(tempoResult.bpm - (d.currentStableBpm * 2.0)) < 15.0) {
+                    d.octaveMismatchCount++;
+                    isOctaveError = true;
+                }
+                // Defending against half-time jumps (e.g. 120 dropping to 60)
+                else if (std::abs(tempoResult.bpm - (d.currentStableBpm * 0.5)) < 6.0) {
+                    d.octaveMismatchCount++;
+                    isOctaveError = true;
+                }
+
+                // If it is a momentary octave jump, clamp back to the stable reading
+                if (isOctaveError) {
+                    // If it insists on the octave for 5 frames, break the lock
+                    if (d.octaveMismatchCount > 5) {
+                        d.currentStableBpm = tempoResult.bpm; 
+                        d.octaveMismatchCount = 0;
+                        isOctaveError = false; 
+                    } else {
+                        // Clamp it to the stable reading
+                        tempoResult.bpm = d.currentStableBpm; 
+                    }
+                } else {
+                    d.octaveMismatchCount = 0; 
+                }
+            }
+
+            // Smoothing and Hard Resets
+            // If it is the very first beat or a massive tempo shift, snap immediately
+            if (d.currentStableBpm == 0.0 || std::abs(tempoResult.bpm - d.currentStableBpm) > 20.0) {
+                d.currentStableBpm = tempoResult.bpm;
+            } else {
+                // Otherwise glide smoothly
+                d.currentStableBpm = 0.85 * d.currentStableBpm + 0.15 * tempoResult.bpm;
+            }
+
+            // Set the beat tracker lag using the corrected BPM
             int beatRefLag = static_cast<int>(60.0 / tempoResult.bpm * d.featureRate);
             auto dpResult = d.beatTracker.track(d.noveltyBuffer.data(), noveltyLen, beatRefLag);
 

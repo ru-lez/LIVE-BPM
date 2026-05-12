@@ -55,9 +55,13 @@
 
 <script type="module">        
         let audioContext = null;
-        let bpmHistory = [];
-        const maxHistory = 5;
         let clearDisplayTimeout = null;
+
+        
+        let currentDisplayBpm = 0.0;
+        const ALPHA = 0.15; // EMA smoothing factor (lower = smoother)
+        const CONF_THRESHOLD = 0.45; // Ignore incoming BPMs if confidence is below this
+        const VISUAL_DEADZONE = 0.2; // BPM changes smaller than this won't update the display to prevent jitter
 
         window.startAudio = async function() {
             const btn = document.getElementById('startBtn');
@@ -133,17 +137,30 @@
                     clearDisplayTimeout = null;
                 }
 
-                // Update History and Average
-                bpmHistory.push(data.bpm);
-                if (bpmHistory.length > maxHistory) {
-                    bpmHistory.shift(); 
+                // Confidence Gating. Only process the new BPM if the engine is confident
+                if (data.confidence >= CONF_THRESHOLD) {
+                    
+                    if (currentDisplayBpm === 0.0) {
+                        currentDisplayBpm = data.bpm;
+                    }
+
+                    // Exponential Moving Average (EMA)
+                    currentDisplayBpm = (ALPHA * data.bpm) + ((1.0 - ALPHA) * currentDisplayBpm);
                 }
-                
-                const sum = bpmHistory.reduce((a, b) => a + b, 0);
-                const avgBpm = sum / bpmHistory.length;
+
+                // Floating-Point Deadzones
+                let targetDisplayValue = currentDisplayBpm;
+                let currentlyDisplayed = parseFloat(bpmEl.textContent);
+
+                // Apply deadzone
+                if (!isNaN(currentlyDisplayed)) {
+                    if (Math.abs(targetDisplayValue - currentlyDisplayed) < VISUAL_DEADZONE) {
+                        targetDisplayValue = currentlyDisplayed; 
+                    }
+                }
 
                 // Update DOM
-                bpmEl.textContent = avgBpm.toFixed(1);
+                bpmEl.textContent = targetDisplayValue.toFixed(1);
                 confEl.style.width = (data.confidence * 100) + '%';
 
             } else {
@@ -151,7 +168,7 @@
                 // Start a 2-second countdown to clear the display if there are no valid estimates
                 if (!clearDisplayTimeout) {
                     clearDisplayTimeout = setTimeout(() => {
-                        bpmHistory = []; 
+                        currentDisplayBpm = 0.0; // Reset the EMA tracker
                         bpmEl.textContent = '--';
                         confEl.style.width = '0%';
                     }, 2000);
