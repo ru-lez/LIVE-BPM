@@ -35,6 +35,26 @@
         button:hover { background: #00f0c0; }
         button:disabled { opacity: 0.4; cursor: not-allowed; }
         .status { margin-top: 1rem; font-size: 0.9rem; opacity: 0.5; }
+        .note-resolution {
+            margin-top: 1.5rem;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .note-resolution label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 0.95rem;
+            opacity: 0.9;
+            white-space: nowrap;
+        }
+
+        .note-resolution input[type="radio"] {
+            margin-right: 8px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -48,6 +68,21 @@
                 <div class="confidence-fill" id="confidenceFill" style="width: 0%"></div>
             </div>
         </div>
+
+        <div class="note-resolution">
+            <label>
+                <input type="radio" name="resolution" value="1" onchange="updateNoteResolution(this.value)"> 
+                Half Note
+            </label>
+            <label>
+                <input type="radio" name="resolution" value="2" onchange="updateNoteResolution(this.value)" checked> 
+                Quarter Note
+            </label>
+            <label>
+                <input type="radio" name="resolution" value="3" onchange="updateNoteResolution(this.value)"> 
+                Eighth Note
+            </label>
+        </div>
         
         <button id="startBtn" onclick="startAudio()" disabled>Start</button>
         <div class="status" id="status">Loading WASM...</div>
@@ -56,6 +91,7 @@
 <script type="module">        
         let audioContext = null;
         let clearDisplayTimeout = null;
+        let audioWorkletNode = null;
 
         
         let currentDisplayBpm = 0.0;
@@ -94,10 +130,10 @@
                 await audioContext.audioWorklet.addModule('processor.js');
 
                 // Create worklet node
-                const workletNode = new AudioWorkletNode(audioContext, 'livebpm-processor');
+                audioWorkletNode = new AudioWorkletNode(audioContext, 'livebpm-processor');
                 
                 // Listen for results from worklet
-                workletNode.port.onmessage = (event) => {
+                audioWorkletNode.port.onmessage = (event) => {
                     const { type, data, message } = event.data;
                     if (type === 'ready') {
                         status.textContent = 'Listening... play a rhythm!';
@@ -111,10 +147,10 @@
 
                 // Connect graph: Mic -> WorkletNode
                 const source = audioContext.createMediaStreamSource(stream);
-                source.connect(workletNode);
+                source.connect(audioWorkletNode);
 
                 // Initialise WASM engine in worklet
-                workletNode.port.postMessage({ 
+                audioWorkletNode.port.postMessage({ 
                     type: 'init',
                     sampleRate: audioContext.sampleRate,
                     wasmBinary: wasmBinary
@@ -124,6 +160,15 @@
                 status.textContent = 'Error: ' + err.message;
                 btn.disabled = false;
                 btn.textContent = 'Retry';
+            }
+        };
+
+        window.updateNoteResolution = function(value) {
+            if (audioWorkletNode) {
+                audioWorkletNode.port.postMessage({
+                    type: 'setResolution',
+                    value: parseInt(value)
+                });
             }
         };
 

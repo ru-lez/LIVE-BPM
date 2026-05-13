@@ -253,17 +253,17 @@ void Engine::processBlock(const float* samples, int numSamples) {
         );
 
         if (tempoResult.bpm > 0) {
-            // Octave Error Correction with Escape Hatc
+            // Octave Error Correction with Escape Hatch
             if (d.currentStableBpm > 0.0) {
                 bool isOctaveError = false;
 
                 // Defending against double-time jumps (e.g. 60 jumping to 120)
-                if (std::abs(tempoResult.bpm - (d.currentStableBpm * 2.0)) < 15.0) {
+                if (std::abs(tempoResult.bpm - (d.currentStableBpm * 2.0)) < d.config.doubleTimeJumpThreshold) {
                     d.octaveMismatchCount++;
                     isOctaveError = true;
                 }
                 // Defending against half-time jumps (e.g. 120 dropping to 60)
-                else if (std::abs(tempoResult.bpm - (d.currentStableBpm * 0.5)) < 6.0) {
+                else if (std::abs(tempoResult.bpm - (d.currentStableBpm * 0.5)) < d.config.halfTimeJumpThreshold) {
                     d.octaveMismatchCount++;
                     isOctaveError = true;
                 }
@@ -298,7 +298,16 @@ void Engine::processBlock(const float* samples, int numSamples) {
             auto dpResult = d.beatTracker.track(d.noveltyBuffer.data(), noveltyLen, beatRefLag);
 
             Result result;
-            result.bpm = tempoResult.bpm;
+
+            // Adjust BPM according to target note resolution
+            float finalBpm = tempoResult.bpm; 
+            if (d.config.targetResolution == NoteResolution::HalfNote) {
+                finalBpm *= 0.5f; 
+            } else if (d.config.targetResolution == NoteResolution::EighthNote) {
+                finalBpm *= 2.0f;
+            }
+
+            result.bpm = finalBpm;
             result.confidence = 0.4 * dpResult.stability
                               + 0.4 * dpResult.alignment
                               + 0.2 * dpResult.coverage;
@@ -308,6 +317,8 @@ void Engine::processBlock(const float* samples, int numSamples) {
             result.processingTimeMs =
                 std::chrono::duration<double, std::milli>(end - start).count();
 
+
+            
             latestResult_ = result;
         }
     }
@@ -315,6 +326,10 @@ void Engine::processBlock(const float* samples, int numSamples) {
 
 Result Engine::getLatestResult() const {
     return latestResult_;
+}
+
+void Engine::setTargetResolution(NoteResolution resolution) {
+    pImpl_->config.targetResolution = resolution;
 }
 
 void Engine::reset() {

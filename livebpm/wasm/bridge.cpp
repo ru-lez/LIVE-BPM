@@ -45,6 +45,10 @@ public:
         return result;
     }
 
+    void setTargetResolution(livebpm::NoteResolution res) {
+        engine_->setTargetResolution(res); 
+    }
+
     void reset() {
         engine_->reset();
     }
@@ -55,6 +59,11 @@ private:
 
 // Register the class with Embind
 EMSCRIPTEN_BINDINGS(livebpm) {
+    enum_<livebpm::NoteResolution>("NoteResolution")
+        .value("HalfNote", livebpm::NoteResolution::HalfNote)
+        .value("QuarterNote", livebpm::NoteResolution::QuarterNote)
+        .value("EighthNote", livebpm::NoteResolution::EighthNote);
+        
     class_<LiveBpmWasm>("LiveBpmEngine")
         .constructor<double, int>()
         .function("processBlock", &LiveBpmWasm::processBlock)
@@ -62,5 +71,6 @@ EMSCRIPTEN_BINDINGS(livebpm) {
         .function("getConfidence", &LiveBpmWasm::getConfidence)
         .function("hasValidEstimate", &LiveBpmWasm::hasValidEstimate)
         .function("getResult", &LiveBpmWasm::getResult)
+        .function("setTargetResolution", &LiveBpmWasm::setTargetResolution)
         .function("reset", &LiveBpmWasm::reset);
 }

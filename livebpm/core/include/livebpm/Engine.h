@@ -15,6 +15,8 @@ public:
     Result getLatestResult() const;
     void reset();
 
+    void setTargetResolution(NoteResolution resolution);
+
 private:
     struct Impl;
     std::unique_ptr<Impl> pImpl_;

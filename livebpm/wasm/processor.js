@@ -24,6 +24,16 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
             if (event.data.type === 'init') {
                 // Receive the binary from the main thread
                 await this.initWasm(event.data.sampleRate, event.data.wasmBinary);
+            } else if (event.data.type === 'setResolution') {
+                if (this.engine) {
+                    // Map the integer from JS to the Embind Enum
+                    let resEnum;
+                    if (event.data.value === 1) resEnum = this.module.NoteResolution.HalfNote;
+                    else if (event.data.value === 3) resEnum = this.module.NoteResolution.EighthNote;
+                    else resEnum = this.module.NoteResolution.QuarterNote;
+                    
+                    this.engine.setTargetResolution(resEnum);
+                }
             }
         };
     }
