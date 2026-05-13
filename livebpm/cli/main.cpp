@@ -255,6 +255,11 @@ int main(int argc, char* argv[])
             }
 
             double targetDisplayValue = currentDisplayBpm;
+            // Magnetic Snapping
+            double nearestWhole = std::round(targetDisplayValue);
+            if (std::abs(targetDisplayValue - nearestWhole) < 0.25) {
+                targetDisplayValue = nearestWhole;
+            }
 
             if (lastPrintedBpm != 0.0) {
                 if (std::abs(targetDisplayValue - lastPrintedBpm) < VISUAL_DEADZONE) {

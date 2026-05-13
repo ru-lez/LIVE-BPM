@@ -150,6 +150,14 @@
 
                 // Floating-Point Deadzones
                 let targetDisplayValue = currentDisplayBpm;
+
+                // Magnetic Snapping
+                // If BPM is within 0.25 of a whole number, snap to it
+                let nearestWhole = Math.round(targetDisplayValue);
+                if (Math.abs(targetDisplayValue - nearestWhole) < 0.25) {
+                    targetDisplayValue = nearestWhole;
+                }
+
                 let currentlyDisplayed = parseFloat(bpmEl.textContent);
 
                 // Apply deadzone
