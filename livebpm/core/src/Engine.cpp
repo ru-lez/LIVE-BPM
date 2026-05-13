@@ -116,6 +116,15 @@ void Engine::processBlock(const float* samples, int numSamples) {
         // Read FFT window
         d.ringBuffer.readLatest(d.fftWindow.data(), d.fftSize);
 
+        // Calculate max amplitude for this specific window for noise gating
+        float windowMaxAmp = 0.0f;
+        for (int i = 0; i < d.fftSize; ++i) {
+            float absSample = std::abs(d.fftWindow[i]);
+            if (absSample > windowMaxAmp) {
+                windowMaxAmp = absSample;
+            }
+        }
+
         // FFT
         d.spectral.compute(d.fftWindow.data(),
                            d.currentMag.data(),
@@ -187,6 +196,11 @@ void Engine::processBlock(const float* samples, int numSamples) {
         // Logarithmic compression
         const float lambda = 50.0f;
         float novelty = std::log1p(lambda * combinedFlux);
+
+        // If the audio window is just room noise, force the novelty peak to zero
+        if (windowMaxAmp < d.config.SILENCE_THRESHOLD) {
+            novelty = 0.0f; 
+        }
 
         /*
         #ifdef LIVEBPM_DEBUG

@@ -11,6 +11,8 @@ struct Config {
     double minBpm = 40.0;
     double maxBpm = 240.0;
     double analysisWindowSeconds = 4.0;
+
+    double SILENCE_THRESHOLD = 0.03; // Noise Gating threshold
 };
 
 } // namespace livebpm
