@@ -46,12 +46,13 @@ float OnsetDetection::complexDomain(const float* currentMag, const float* curren
 }
 
 
-float OnsetDetection::semitoneFlux(const float* currentMag,
+float OnsetDetection::superFlux(const float* currentMag,
                                     const float* previousBandEnergies,
                                     float* outBandEnergies,
                                     const float* filterBank,
                                     int numBins,
-                                    int numBands)
+                                    int numBands,
+                                    int maxFilterWidth)
 {
     // Step 1: Apply each triangular filter to get band energies
     // b_i = sqrt( sum_k (|X[k]| * |H_i[k]|)^2 )
@@ -65,12 +66,29 @@ float OnsetDetection::semitoneFlux(const float* currentMag,
         outBandEnergies[i] = std::sqrt(sumSquared);
     }
 
-    // Step 2: Compute positive first-order derivatives across all bands
-    // a[t] = sum max(0, b_i[t] - b_i[t-1])
+    // Step 2: Compute derivatives using the Maximum Filter
+    // m_i = max_{j=i-W}^{i+W} ( previousBandEnergies[j] )
+    // D = sum_i max(0, outBandEnergies[i] - m_i)
+    // E_total = sum_i outBandEnergies[i]
     float positiveDerivatives = 0.0f;
     float totalEnergy = 0.0f;
+
     for (int i = 0; i < numBands; ++i) {
-        float diff = outBandEnergies[i] - previousBandEnergies[i];
+        // Find the maximum energy in the local frequency neighborhood of the previous frame
+        int start = std::max(0, i - maxFilterWidth);
+        int end = std::min(numBands - 1, i + maxFilterWidth);
+        
+        float localMaxPrev = 0.0f;
+        for (int j = start; j <= end; ++j) {
+            if (previousBandEnergies[j] > localMaxPrev) {
+                localMaxPrev = previousBandEnergies[j];
+            }
+        }
+
+        // Calculate difference against the local maximum
+        float diff = outBandEnergies[i] - localMaxPrev;
+        
+        // Half-wave rectification
         if (diff > 0.0f) {
             positiveDerivatives += diff;
         }

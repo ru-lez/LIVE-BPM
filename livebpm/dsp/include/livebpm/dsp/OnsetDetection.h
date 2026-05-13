@@ -22,15 +22,17 @@ public:
     //   filterBank           = precomputed triangular filter weights (numBands * numBins)
     //   numBins              = FFT bins (fftSize/2 + 1)
     //   numBands             = number of semitone bands (typically ~88)
-    static float semitoneFlux(const float* currentMag,
+    //   maxFilterWidth       = how many adjacent bands to consider for flux
+    static float superFlux(const float* currentMag,
                               const float* previousBandEnergies,
                               float* outBandEnergies,
                               const float* filterBank,
                               int numBins,
-                              int numBands);
+                              int numBands,
+                              int maxFilterWidth = 1);
 
-    // Build precomputed triangular filter bank for semitoneFlux().
-    // Call once at engine startup, store the result, pass to semitoneFlux().
+    // Build precomputed triangular filter bank for superFlux().
+    // Call once at engine startup, store the result, pass to superFlux().
     static std::vector<float> buildSemitoneFilterBank(
         int numBins, float sampleRate, int fftSize,
         float minFreqHz = 55.0f,    // A1

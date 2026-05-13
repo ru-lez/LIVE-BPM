@@ -87,11 +87,11 @@ TEST_CASE("OnsetDetection: buildSemitoneFilterBank generates correct dimensions"
     }
 }
 
-TEST_CASE("OnsetDetection: semitoneFlux calculates positive derivatives accurately", "[onset]") {
+TEST_CASE("OnsetDetection: superFlux calculates positive derivatives accurately", "[onset]") {
     int numBins = 4;
     int numBands = 2;
     std::vector<float> currentMag = {1.0f, 2.0f, 0.5f, 0.1f};
-    std::vector<float> prevBands = {0.5f, 0.5f};
+    std::vector<float> prevBands = {0.3f, 0.7f};
     
     // Mock filter bank
     std::vector<float> filterBank = {
@@ -100,7 +100,7 @@ TEST_CASE("OnsetDetection: semitoneFlux calculates positive derivatives accurate
     };
     std::vector<float> outBands(numBands, 0.0f);
 
-    float flux = OnsetDetection::semitoneFlux(currentMag.data(), prevBands.data(), outBands.data(), filterBank.data(), numBins, numBands);
+    float flux = OnsetDetection::superFlux(currentMag.data(), prevBands.data(), outBands.data(), filterBank.data(), numBins, numBands, 1);
 
     // Band 0 expected energy: sqrt((1*1)^2 + (2*0.5)^2) = sqrt(1 + 1) = 1.4142
     REQUIRE_THAT(outBands[0], Catch::Matchers::WithinRel(1.4142f, 0.01f));
@@ -110,7 +110,16 @@ TEST_CASE("OnsetDetection: semitoneFlux calculates positive derivatives accurate
     
     // Expected Flux:
     // Total energy = 1.4142 + 1.1180 = 2.5322
-    // Positive diffs = (1.4142 - 0.5) + (1.1180 - 0.5) = 0.9142 + 0.6180 = 1.5322
-    // Normalised Flux = 1.5322 / 2.5322 = 0.605
-    REQUIRE_THAT(flux, Catch::Matchers::WithinRel(0.6050f, 0.01f));
+    //
+    // Maximum Filter (width = 1):
+    // Band 0 local max = max(prevBands[0], prevBands[1]) = max(0.3, 0.7) = 0.7
+    // Band 1 local max = max(prevBands[0], prevBands[1]) = max(0.3, 0.7) = 0.7
+    //
+    // Positive diffs:
+    // Band 0: max(0, 1.4142 - 0.7) = 0.7142
+    // Band 1: max(0, 1.1180 - 0.7) = 0.4180
+    // Total positive diffs = 0.7142 + 0.4180 = 1.1322
+    //
+    // Normalised Flux = 1.1322 / 2.5322 = 0.4471
+    REQUIRE_THAT(flux, Catch::Matchers::WithinRel(0.4471f, 0.01f));
 }

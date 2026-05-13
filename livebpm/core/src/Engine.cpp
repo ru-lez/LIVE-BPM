@@ -124,13 +124,14 @@ void Engine::processBlock(const float* samples, int numSamples) {
         // ---- Stream 1: Semitone Filter Bank Flux (Pertusa & Iñesta 2009) ----
         // Robust to vibrato and minor harmonic drift. Strong on percussion and
         // articulated harmonic instruments. Output is normalised to ~[0, 1].
-        float semitoneFlux = dsp::OnsetDetection::semitoneFlux(
+        float semitoneFlux = dsp::OnsetDetection::superFlux(
             d.currentMag.data(),
             d.previousBandEnergies.data(),
             d.currentBandEnergies.data(),
             d.filterBank.data(),
             d.numBins,
-            d.numSemitoneBands
+            d.numSemitoneBands,
+            1 // maxFilterWidth
         );
 
         // ---- Stream 2: Complex Domain (Duxbury et al. 2003) ----
