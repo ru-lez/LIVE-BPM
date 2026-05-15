@@ -17,7 +17,8 @@ public:
 
     TempoResult estimate(const float* novelty, int length,
                          double featureRate,
-                         double minBpm, double maxBpm);
+                         double minBpm, double maxBpm,
+                         double lastBpm, double currentConfidence);
 
 private:
     int maxLength_;

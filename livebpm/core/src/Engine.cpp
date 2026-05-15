@@ -44,6 +44,7 @@ struct Engine::Impl {
     float semitoneFluxMovingAverage = 0.0f;
     float complexFluxMovingAverage = 0.0f;
     float noveltyMovingAverage = 0.0f;
+    float smoothedAlternationRatio = 1.0f;
 
     // Warm-up counter so we don't fuse with garbage moving averages
     int hopsProcessed = 0;
@@ -51,6 +52,7 @@ struct Engine::Impl {
 
     // Novelty buffer for tempo estimation
     std::vector<float> noveltyBuffer;
+    std::vector<float> amplitudeBuffer;
     int hopCounter = 0;
     int noveltyWritePos = 0;
     int maxNoveltyLength;
@@ -58,6 +60,8 @@ struct Engine::Impl {
     // Tempo hysteresis: hold the last stable BPM to prevent erratic jumps when the signal is weak or ambiguous
     double currentStableBpm = 0.0;
     int octaveMismatchCount = 0;
+    int highBpmConfirmationCount = 0;
+    int consecutiveSilenceHops = 0;
 
     Impl(const Config& cfg)
         : config(cfg),
@@ -90,7 +94,7 @@ struct Engine::Impl {
 
         maxNoveltyLength = static_cast<int>(cfg.analysisWindowSeconds * featureRate);
         noveltyBuffer.resize(maxNoveltyLength, 0.0f);
-
+        amplitudeBuffer.resize(maxNoveltyLength, 0.0f);
         std::cout << "[Engine] Initialised semitone filter bank: "
                   << numSemitoneBands << " bands\n";
         std::cout << "[Engine] Onset detection: semitone flux + complex domain (fused)\n";
@@ -200,7 +204,19 @@ void Engine::processBlock(const float* samples, int numSamples) {
 
         // If the audio window is just room noise, force the novelty peak to zero
         if (windowMaxAmp < d.config.SILENCE_THRESHOLD) {
-            rawNovelty = 0.0f; 
+            rawNovelty = 0.0f;
+            d.consecutiveSilenceHops++;
+
+            // Only bleed the engine state if the silence has lasted for > 2 seconds
+            // featureRate = hops per second, so 2.0 * featureRate = 2 seconds
+            if (d.consecutiveSilenceHops > static_cast<int>(2.0 * d.featureRate)) {
+                d.currentStableBpm = d.currentStableBpm * 0.95; 
+                d.highBpmConfirmationCount = 0; 
+                d.octaveMismatchCount = 0; 
+            }
+        } else {
+            // As soon as we hear audio, reset the silence timer
+            d.consecutiveSilenceHops = 0;
         }
 
         // Apply a smoothing filter to round off jagged legato peaks
@@ -219,6 +235,7 @@ void Engine::processBlock(const float* samples, int numSamples) {
         // Store in novelty buffer
         if (d.noveltyWritePos < d.maxNoveltyLength) {
             d.noveltyBuffer[d.noveltyWritePos] = novelty;
+            d.amplitudeBuffer[d.noveltyWritePos] = windowMaxAmp;
             d.noveltyWritePos++;
         } else {
             std::move(d.noveltyBuffer.begin() + 1,
@@ -266,57 +283,120 @@ void Engine::processBlock(const float* samples, int numSamples) {
 
         auto tempoResult = d.tempo.estimate(
             d.noveltyBuffer.data(), noveltyLen,
-            d.featureRate, currentMinBpm, currentMaxBpm
+            d.featureRate, currentMinBpm, currentMaxBpm,
+            d.currentStableBpm, latestResult_.confidence
         );
 
         if (tempoResult.bpm > 0) {
             
+            std::cout << "[DSP] Raw Detected: " << tempoResult.bpm 
+                      << " | Stable: " << d.currentStableBpm 
+                      << " | Ratio: " << d.smoothedAlternationRatio << "\n";
+            
+            
             // Immediately scale the detected pulse back to Master 1/4 Note Tempo
-            // to ensure all hysteresis/smoothing run on 1/4 notes
             tempoResult.bpm /= inputScale;
 
-            // Octave Error Correction with Escape Hatch
-            bool isOctaveError = false;
-            
-            if (d.currentStableBpm > 0.0) {
-                // Defending against double-time jumps (e.g. 60 jumping to 120)
+            // --- A. ANALYZE (Alternation Check) ---
+            if (tempoResult.bpm > 140.0) { 
+                int beatLag = static_cast<int>(60.0 / tempoResult.bpm * d.featureRate);
+                
+                if (noveltyLen > beatLag * 4) {
+                    float evenPeaks = 0.0f;
+                    float oddPeaks = 0.0f;
+                    int searchWindow = 4;
+
+                    for (int i = 0; i < 4; ++i) {
+                        // Look backward from the most recent write position
+                        int targetPos = (noveltyLen - 1) - (i * beatLag);
+                        
+                        float localMax = 0.0f; 
+                        for (int w = -searchWindow; w <= searchWindow; ++w) {
+                            int idx = targetPos + w;
+                            if (idx >= 0 && idx < noveltyLen) {
+                                localMax = std::max(localMax, d.amplitudeBuffer[idx]);
+                            }
+                        }
+
+                        if (i % 2 == 0) evenPeaks += localMax;
+                        else oddPeaks += localMax;
+                    }
+
+                    float rawRatio = std::max(evenPeaks, oddPeaks) / (std::min(evenPeaks, oddPeaks) + 1e-6f);
+                    rawRatio = std::min(rawRatio, 10.0f);
+
+                    d.smoothedAlternationRatio = (0.3f * rawRatio) + (0.7f * d.smoothedAlternationRatio);
+                }
+            } else {
+                d.smoothedAlternationRatio = (0.1f * 1.0f) + (0.9f * d.smoothedAlternationRatio);
+            }
+
+            // --- B. Veto (Hysteresis Logic) ---
+            float dynamicThreshold = 2.5f; // Neutral / Startup
+            if (d.currentStableBpm > 150.0) {
+                dynamicThreshold = 3.5f; // Very loose if already at high speed
+            } else if (d.currentStableBpm > 0.0 && d.currentStableBpm < 110.0) {
+                dynamicThreshold = 2.0f; // Strict if locked at slow speed
+            }
+
+            if (tempoResult.bpm > 140.0) {
+                int beatLag = static_cast<int>(60.0 / tempoResult.bpm * d.featureRate);
+                
+                // Veto if there is enough data
+                if (noveltyLen > beatLag * 4) {
+                    if (d.smoothedAlternationRatio > dynamicThreshold) {
+                        // Strum-Tap
+                        tempoResult.bpm *= 0.5;
+                        d.highBpmConfirmationCount = std::max(0, d.highBpmConfirmationCount - 2); 
+                    } else {
+                        // Fast Tempo, Increment streak
+                        d.highBpmConfirmationCount = std::min(20, d.highBpmConfirmationCount + 1);
+                        if (d.highBpmConfirmationCount < 12) {
+                            tempoResult.bpm *= 0.5;
+                        }
+                    }
+                } else {
+                    d.highBpmConfirmationCount = 12; 
+                }
+            } else {
+                d.highBpmConfirmationCount = 0;
+            }
+
+            // --- C. COMMIT (Hysteresis/Escape Hatch) ---
+            if (d.currentStableBpm == 0.0) {
+                d.currentStableBpm = tempoResult.bpm;
+            } else {
+                bool isOctaveError = false;
+                
+                // Defending against double-time and half-time jumps
                 if (std::abs(tempoResult.bpm - (d.currentStableBpm * 2.0)) < d.config.doubleTimeJumpThreshold) {
                     d.octaveMismatchCount++;
                     isOctaveError = true;
-                }
-                // Defending against half-time jumps (e.g. 120 dropping to 60)
-                else if (std::abs(tempoResult.bpm - (d.currentStableBpm * 0.5)) < d.config.halfTimeJumpThreshold) {
+                } else if (std::abs(tempoResult.bpm - (d.currentStableBpm * 0.5)) < d.config.halfTimeJumpThreshold) {
                     d.octaveMismatchCount++;
                     isOctaveError = true;
                 }
 
-                // If it is a momentary octave jump, clamp back to the stable reading
                 if (isOctaveError) {
-                    // If it insists on the octave for 5 frames, break the lock
-                    if (d.octaveMismatchCount > 5) {
+                    // If it insists on the octave for 3 frames, break the lock
+                    if (d.octaveMismatchCount > 3) {
                         d.currentStableBpm = tempoResult.bpm; 
                         d.octaveMismatchCount = 0;
-                        isOctaveError = false; 
                     } else {
                         // Clamp it to the stable reading
                         tempoResult.bpm = d.currentStableBpm; 
                     }
                 } else {
                     d.octaveMismatchCount = 0; 
+                    // Smoothing and Hard Resets
+                    if (std::abs(tempoResult.bpm - d.currentStableBpm) > 20.0) {
+                        // Hard reset if it's a massive shift
+                        d.currentStableBpm = tempoResult.bpm;
+                    } else {
+                        // Otherwise glide smoothly
+                        d.currentStableBpm = 0.85 * d.currentStableBpm + 0.15 * tempoResult.bpm;
+                    }
                 }
-            }
-
-            // Smoothing and Hard Resets
-            // If it is the very first beat or a massive tempo shift, snap immediately
-            if (d.currentStableBpm == 0.0) {
-                // Very first beat
-                d.currentStableBpm = tempoResult.bpm;
-            } else if (!isOctaveError && std::abs(tempoResult.bpm - d.currentStableBpm) > 20.0) {
-                // only hard reset if it's a massive shift and not currently fighting an octave error
-                d.currentStableBpm = tempoResult.bpm;
-            } else {
-                // Otherwise glide smoothly
-                d.currentStableBpm = 0.85 * d.currentStableBpm + 0.15 * tempoResult.bpm;
             }
 
             // Set the beat tracker lag using the corrected BPM

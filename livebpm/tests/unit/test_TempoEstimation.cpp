@@ -15,7 +15,9 @@ TEST_CASE("TempoEstimation: 120 BPM synthetic novelty", "[tempo]") {
         static_cast<int>(novelty.size()),
         featureRate,
         40.0,
-        240.0
+        240.0,
+        0.0,
+        0.0
     );
 
     REQUIRE(result.bpm > 115.0);
@@ -33,7 +35,9 @@ TEST_CASE("TempoEstimation: 60 BPM synthetic novelty", "[tempo]") {
         static_cast<int>(novelty.size()),
         featureRate,
         40.0,
-        240.0
+        240.0,
+        0.0,
+        0.0
     );
 
     REQUIRE(result.bpm > 55.0);
@@ -50,7 +54,9 @@ TEST_CASE("TempoEstimation: 180 BPM synthetic novelty", "[tempo]") {
         static_cast<int>(novelty.size()),
         featureRate,
         40.0,
-        240.0
+        240.0,
+        120.0, // lastBpm to help bias towards correct octave
+        0.0
     );
 
     REQUIRE(result.bpm > 175.0);
@@ -67,7 +73,9 @@ TEST_CASE("TempoEstimation: silence produces weak result", "[tempo]") {
         500,
         featureRate,
         40.0,
-        240.0
+        240.0,
+        0.0,
+        0.0
     );
 
     REQUIRE(result.strength < 0.1);
@@ -86,7 +94,9 @@ TEST_CASE("TempoEstimation: Bounding constraints enforces minBpm and maxBpm", "[
         static_cast<int>(novelty.size()),
         featureRate,
         160.0, 
-        200.0  
+        200.0,
+        0.0,
+        0.0
     );
 
     // estimated BPM must stay within defined boundary despite the 120 BPM signal
@@ -98,7 +108,7 @@ TEST_CASE("TempoEstimation: estimate returns empty result if length is less than
     TempoEstimation te(1024);
     float singleSample = 1.0f;
     
-    auto result = te.estimate(&singleSample, 1, 93.75, 40.0, 240.0);
+    auto result = te.estimate(&singleSample, 1, 93.75, 40.0, 240.0, 0.0, 0.0);
     
     // Aborted estimation should return default TempoResult (0.0 BPM)
     REQUIRE(result.bpm == 0.0);

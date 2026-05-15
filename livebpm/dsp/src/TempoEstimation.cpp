@@ -6,6 +6,7 @@
 #include "kiss_fft.h"
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 
 namespace livebpm { namespace dsp {
 
@@ -35,7 +36,8 @@ TempoEstimation::~TempoEstimation() {
 
 TempoResult TempoEstimation::estimate(const float* novelty, int length,
                                        double featureRate,
-                                       double minBpm, double maxBpm)
+                                       double minBpm, double maxBpm,
+                                       double lastBpm, double currentConfidence)
 {
     if (length < 2) return TempoResult{};
 
@@ -75,27 +77,50 @@ TempoResult TempoEstimation::estimate(const float* novelty, int length,
     minLag = std::max(1, minLag);
     maxLag = std::min(maxLag, length - 1);
 
-    double bestScore = -1e30;
+    double bestBiasedScore = -1.0;
+    double bestRawScore = -1.0;
+    double rawWinnerBpm = 0.0;
     int bestLag = minLag;
 
+    // Use current confidence to flatten the bias curve if signal is weak
+    double centerBpm = (lastBpm > 0.0) ? lastBpm : 100.0;
+    double dynamicWidth = 1.1 + (3.0 * (1.0 - currentConfidence));
+
     for (int lag = minLag; lag <= maxLag; ++lag) {
-        double score = 1.0 * autocorr_[lag];
-        if (lag * 2 < length) score += 0.6  * autocorr_[lag * 2];
-        if (lag * 3 < length) score += 0.25 * autocorr_[lag * 3];
-
-        // Perceptual resonance weighting (Log-Gaussian)
-        // Centers the algorithm's bias around a natural 120 BPM to suppress double-time jumps
+        double rawScore = autocorr_[lag];
         double currentBpm = 60.0 * featureRate / lag;
-        double weight = std::exp(-0.5 * std::pow(std::log2(currentBpm / 100.0) / 1.1, 2.0));
-        score *= weight;
 
-        if (score > bestScore) {
-            bestScore = score;
-            bestLag   = lag;
+        // Log-Gaussian Weighting
+        double weight = std::exp(-0.5 * std::pow(std::log2(currentBpm / centerBpm) / dynamicWidth, 2.0));
+        double biasedScore = rawScore * weight;
+
+        // Track the strongest peak for breakthrough logic
+        if (rawScore > bestRawScore) {
+            bestRawScore = rawScore;
+            rawWinnerBpm = currentBpm;
+        }
+
+        // Track the winner according to the bias
+        if (biasedScore > bestBiasedScore) {
+            bestBiasedScore = biasedScore;
+            bestLag = lag;
         }
     }
 
-    // --- Step 3: Parabolic interpolation ---
+    // Calculate the BPM of our biased winner
+    double finalBpm = 60.0 * featureRate / bestLag;
+
+    // --- Step 3: Breakthrough Logic for Strong Unbiased Peaks ---
+    double biasedWinnerRawScore = autocorr_[bestLag];
+    
+    if (std::abs(rawWinnerBpm - (finalBpm * 2.0)) < 10.0) {
+        if (bestRawScore > biasedWinnerRawScore * 0.95) {
+            finalBpm = rawWinnerBpm;
+            return TempoResult{ finalBpm, static_cast<float>(bestRawScore) };
+        }
+    }
+
+    // --- Step 4: Parabolic interpolation ---
     double refinedLag = bestLag;
     if (bestLag > 0 && bestLag < length - 1) {
         double alpha = autocorr_[bestLag - 1];
@@ -109,11 +134,11 @@ TempoResult TempoEstimation::estimate(const float* novelty, int length,
         }
     }
 
-    // --- Step 4: Convert lag to BPM ---
-    double bpm = 60.0 * featureRate / refinedLag;
-    double strength = std::max(0.0, bestScore);
+    // --- Step 5 ---
+    finalBpm = 60.0 * featureRate / refinedLag;
+    float strength = static_cast<float>(std::max(0.0, bestBiasedScore));
 
-    return TempoResult{bpm, strength};
+    return TempoResult{ finalBpm, strength };
 }
 
 }} // namespace livebpm::dsp
