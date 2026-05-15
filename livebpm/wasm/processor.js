@@ -30,6 +30,8 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
                     let resEnum;
                     if (event.data.value === 1) resEnum = this.module.NoteResolution.HalfNote;
                     else if (event.data.value === 3) resEnum = this.module.NoteResolution.EighthNote;
+                    else if (event.data.value === 4) resEnum = this.module.NoteResolution.EighthNoteTriplet;
+                    else if (event.data.value === 5) resEnum = this.module.NoteResolution.SixteenthNote;
                     else resEnum = this.module.NoteResolution.QuarterNote;
                     
                     this.engine.setTargetResolution(resEnum);
@@ -53,7 +55,7 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
             this.heapPtr = this.module._malloc(128 * 4);
             
             this.ready = true;
-            this.port.postMessage({ type: 'ready' });
+            this.port.postMessage({ type: 'ready', deadzone: this.engine.getVisualDeadzone() });
         } catch (err) {
             this.port.postMessage({ type: 'error', message: err.message });
         }

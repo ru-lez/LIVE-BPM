@@ -238,7 +238,7 @@ int main(int argc, char* argv[])
 
     const double ALPHA = 0.15;
     const double CONF_THRESHOLD = 0.45;
-    const double VISUAL_DEADZONE = 0.2;
+    double VISUAL_DEADZONE = engine.getVisualDeadzone();
 
     // --- Main display loop (10 fps) ---
     while (running.load()) {
@@ -255,11 +255,14 @@ int main(int argc, char* argv[])
             }
 
             double targetDisplayValue = currentDisplayBpm;
+
+            
             // Magnetic Snapping
             double nearestWhole = std::round(targetDisplayValue);
-            if (std::abs(targetDisplayValue - nearestWhole) < 0.25) {
+            if (std::abs(targetDisplayValue - nearestWhole) < 0.15) {
                 targetDisplayValue = nearestWhole;
             }
+            
 
             if (lastPrintedBpm != 0.0) {
                 if (std::abs(targetDisplayValue - lastPrintedBpm) < VISUAL_DEADZONE) {

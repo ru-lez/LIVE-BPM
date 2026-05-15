@@ -247,12 +247,29 @@ void Engine::processBlock(const float* samples, int numSamples) {
     // Re-estimate tempo
     int noveltyLen = std::min(d.noveltyWritePos, d.maxNoveltyLength);
     if (noveltyLen > 50) {
+        
+        // Mathematical scale based on user input
+        float inputScale = 1.0f;
+        if (d.config.targetResolution == NoteResolution::SixteenthNote) inputScale = 4.0f;
+        else if (d.config.targetResolution == NoteResolution::EighthNoteTriplet) inputScale = 3.0f;
+        else if (d.config.targetResolution == NoteResolution::EighthNote) inputScale = 2.0f;
+        else if (d.config.targetResolution == NoteResolution::HalfNote) inputScale = 0.5f;
+
+        // Dynamic Window Shift (Allowing engine to search up to 360+ BPM for 16ths)
+        double currentMinBpm = std::min(d.config.minBpm, (double)(d.config.minBpm * inputScale));
+        double currentMaxBpm = std::max(d.config.maxBpm, (double)(d.config.maxBpm * inputScale));
+
         auto tempoResult = d.tempo.estimate(
             d.noveltyBuffer.data(), noveltyLen,
-            d.featureRate, d.config.minBpm, d.config.maxBpm
+            d.featureRate, currentMinBpm, currentMaxBpm
         );
 
         if (tempoResult.bpm > 0) {
+            
+            // Immediately scale the detected pulse back to Master 1/4 Note Tempo
+            // to ensure all hysteresis/smoothing run on 1/4 notes
+            tempoResult.bpm /= inputScale;
+
             // Octave Error Correction with Escape Hatch
             if (d.currentStableBpm > 0.0) {
                 bool isOctaveError = false;
@@ -298,16 +315,9 @@ void Engine::processBlock(const float* samples, int numSamples) {
             auto dpResult = d.beatTracker.track(d.noveltyBuffer.data(), noveltyLen, beatRefLag);
 
             Result result;
-
-            // Adjust BPM according to target note resolution
-            float finalBpm = tempoResult.bpm; 
-            if (d.config.targetResolution == NoteResolution::HalfNote) {
-                finalBpm *= 2.0f; 
-            } else if (d.config.targetResolution == NoteResolution::EighthNote) {
-                finalBpm *= 0.5f;
-            }
-
-            result.bpm = finalBpm;
+            
+            // Assign final smoothed BPM
+            result.bpm = tempoResult.bpm; 
             result.confidence = 0.4 * dpResult.stability
                               + 0.4 * dpResult.alignment
                               + 0.2 * dpResult.coverage;
@@ -317,8 +327,6 @@ void Engine::processBlock(const float* samples, int numSamples) {
             result.processingTimeMs =
                 std::chrono::duration<double, std::milli>(end - start).count();
 
-
-            
             latestResult_ = result;
         }
     }
@@ -330,6 +338,10 @@ Result Engine::getLatestResult() const {
 
 void Engine::setTargetResolution(NoteResolution resolution) {
     pImpl_->config.targetResolution = resolution;
+}
+
+double Engine::getVisualDeadzone() const {
+    return pImpl_->config.VISUAL_DEADZONE;
 }
 
 void Engine::reset() {

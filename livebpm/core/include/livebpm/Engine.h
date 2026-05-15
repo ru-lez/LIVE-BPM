@@ -17,6 +17,8 @@ public:
 
     void setTargetResolution(NoteResolution resolution);
 
+    double getVisualDeadzone() const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> pImpl_;

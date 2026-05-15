@@ -72,15 +72,23 @@
         <div class="note-resolution">
             <label>
                 <input type="radio" name="resolution" value="1" onchange="updateNoteResolution(this.value)"> 
-                Half Note
+                1/2 Note
             </label>
             <label>
                 <input type="radio" name="resolution" value="2" onchange="updateNoteResolution(this.value)" checked> 
-                Quarter Note
+                1/4 Note
             </label>
             <label>
                 <input type="radio" name="resolution" value="3" onchange="updateNoteResolution(this.value)"> 
-                Eighth Note
+                1/8 Note
+            </label>
+            <label>
+                <input type="radio" name="resolution" value="4" onchange="updateNoteResolution(this.value)"> 
+                1/8 Note Triplet
+            </label>
+            <label>
+                <input type="radio" name="resolution" value="5" onchange="updateNoteResolution(this.value)"> 
+                1/16 Note
             </label>
         </div>
         
@@ -97,7 +105,7 @@
         let currentDisplayBpm = 0.0;
         const ALPHA = 0.15; // EMA smoothing factor (lower = smoother)
         const CONF_THRESHOLD = 0.45; // Ignore incoming BPMs if confidence is below this
-        const VISUAL_DEADZONE = 0.2; // BPM changes smaller than this won't update the display to prevent jitter
+        let VISUAL_DEADZONE = 0.2; // BPM changes smaller than this won't update the display to prevent jitter
 
         window.startAudio = async function() {
             const btn = document.getElementById('startBtn');
@@ -138,6 +146,7 @@
                     if (type === 'ready') {
                         status.textContent = 'Listening... play a rhythm!';
                         btn.textContent = 'Listening...';
+                        VISUAL_DEADZONE = event.data.deadzone;
                     } else if (type === 'result') {
                         updateDisplay(data);
                     } else if (type === 'error') {
@@ -196,12 +205,14 @@
                 // Floating-Point Deadzones
                 let targetDisplayValue = currentDisplayBpm;
 
+                
                 // Magnetic Snapping
                 // If BPM is within 0.25 of a whole number, snap to it
                 let nearestWhole = Math.round(targetDisplayValue);
-                if (Math.abs(targetDisplayValue - nearestWhole) < 0.25) {
+                if (Math.abs(targetDisplayValue - nearestWhole) < 0.15) {
                     targetDisplayValue = nearestWhole;
                 }
+                
 
                 let currentlyDisplayed = parseFloat(bpmEl.textContent);
 

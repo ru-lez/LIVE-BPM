@@ -24,6 +24,10 @@ public:
         return engine_->getLatestResult().bpm;
     }
 
+    double getVisualDeadzone() {
+        return engine_->getVisualDeadzone();
+    }
+
     // Returns confidence [0, 1]
     double getConfidence() {
         return engine_->getLatestResult().confidence;
@@ -62,7 +66,9 @@ EMSCRIPTEN_BINDINGS(livebpm) {
     enum_<livebpm::NoteResolution>("NoteResolution")
         .value("HalfNote", livebpm::NoteResolution::HalfNote)
         .value("QuarterNote", livebpm::NoteResolution::QuarterNote)
-        .value("EighthNote", livebpm::NoteResolution::EighthNote);
+        .value("EighthNote", livebpm::NoteResolution::EighthNote)
+        .value("EighthNoteTriplet", livebpm::NoteResolution::EighthNoteTriplet)
+        .value("SixteenthNote", livebpm::NoteResolution::SixteenthNote);
         
     class_<LiveBpmWasm>("LiveBpmEngine")
         .constructor<double, int>()
@@ -72,5 +78,6 @@ EMSCRIPTEN_BINDINGS(livebpm) {
         .function("hasValidEstimate", &LiveBpmWasm::hasValidEstimate)
         .function("getResult", &LiveBpmWasm::getResult)
         .function("setTargetResolution", &LiveBpmWasm::setTargetResolution)
+        .function("getVisualDeadzone", &LiveBpmWasm::getVisualDeadzone)
         .function("reset", &LiveBpmWasm::reset);
 }
