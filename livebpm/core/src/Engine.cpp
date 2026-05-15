@@ -302,9 +302,9 @@ void Engine::processBlock(const float* samples, int numSamples) {
             // Adjust BPM according to target note resolution
             float finalBpm = tempoResult.bpm; 
             if (d.config.targetResolution == NoteResolution::HalfNote) {
-                finalBpm *= 0.5f; 
+                finalBpm *= 2.0f; 
             } else if (d.config.targetResolution == NoteResolution::EighthNote) {
-                finalBpm *= 2.0f;
+                finalBpm *= 0.5f;
             }
 
             result.bpm = finalBpm;

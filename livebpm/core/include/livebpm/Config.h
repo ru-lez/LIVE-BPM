@@ -4,9 +4,9 @@
 
 namespace livebpm {
     enum class NoteResolution {
-        HalfNote = 1,     // Multiplies BPM by 0.5
+        HalfNote = 1,     // Multiplies BPM by 2.0
         QuarterNote = 2,  // Default (x 1.0)
-        EighthNote = 3    // Multiplies BPM by 2.0
+        EighthNote = 3    // Multiplies BPM by 0.5
     };
 
     struct Config {
