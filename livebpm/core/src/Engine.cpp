@@ -43,6 +43,7 @@ struct Engine::Impl {
     // Adaptive gating - independent moving averages per stream
     float semitoneFluxMovingAverage = 0.0f;
     float complexFluxMovingAverage = 0.0f;
+    float noveltyMovingAverage = 0.0f;
 
     // Warm-up counter so we don't fuse with garbage moving averages
     int hopsProcessed = 0;
@@ -195,12 +196,16 @@ void Engine::processBlock(const float* samples, int numSamples) {
 
         // Logarithmic compression
         const float lambda = 50.0f;
-        float novelty = std::log1p(lambda * combinedFlux);
+        float rawNovelty = std::log1p(lambda * combinedFlux);
 
         // If the audio window is just room noise, force the novelty peak to zero
         if (windowMaxAmp < d.config.SILENCE_THRESHOLD) {
-            novelty = 0.0f; 
+            rawNovelty = 0.0f; 
         }
+
+        // Apply a smoothing filter to round off jagged legato peaks
+        d.noveltyMovingAverage = 0.6f * d.noveltyMovingAverage + 0.4f * rawNovelty;
+        float novelty = d.noveltyMovingAverage;
 
         /*
         #ifdef LIVEBPM_DEBUG
@@ -271,9 +276,9 @@ void Engine::processBlock(const float* samples, int numSamples) {
             tempoResult.bpm /= inputScale;
 
             // Octave Error Correction with Escape Hatch
+            bool isOctaveError = false;
+            
             if (d.currentStableBpm > 0.0) {
-                bool isOctaveError = false;
-
                 // Defending against double-time jumps (e.g. 60 jumping to 120)
                 if (std::abs(tempoResult.bpm - (d.currentStableBpm * 2.0)) < d.config.doubleTimeJumpThreshold) {
                     d.octaveMismatchCount++;
@@ -303,7 +308,11 @@ void Engine::processBlock(const float* samples, int numSamples) {
 
             // Smoothing and Hard Resets
             // If it is the very first beat or a massive tempo shift, snap immediately
-            if (d.currentStableBpm == 0.0 || std::abs(tempoResult.bpm - d.currentStableBpm) > 20.0) {
+            if (d.currentStableBpm == 0.0) {
+                // Very first beat
+                d.currentStableBpm = tempoResult.bpm;
+            } else if (!isOctaveError && std::abs(tempoResult.bpm - d.currentStableBpm) > 20.0) {
+                // only hard reset if it's a massive shift and not currently fighting an octave error
                 d.currentStableBpm = tempoResult.bpm;
             } else {
                 // Otherwise glide smoothly
