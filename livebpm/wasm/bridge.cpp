@@ -68,7 +68,8 @@ EMSCRIPTEN_BINDINGS(livebpm) {
         .value("QuarterNote", livebpm::NoteResolution::QuarterNote)
         .value("EighthNote", livebpm::NoteResolution::EighthNote)
         .value("EighthNoteTriplet", livebpm::NoteResolution::EighthNoteTriplet)
-        .value("SixteenthNote", livebpm::NoteResolution::SixteenthNote);
+        .value("SixteenthNote", livebpm::NoteResolution::SixteenthNote)
+        .value("SmartMixed", livebpm::NoteResolution::SmartMixed);
         
     class_<LiveBpmWasm>("LiveBpmEngine")
         .constructor<double, int>()

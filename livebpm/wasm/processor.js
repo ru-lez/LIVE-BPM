@@ -32,6 +32,7 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
                     else if (event.data.value === 3) resEnum = this.module.NoteResolution.EighthNote;
                     else if (event.data.value === 4) resEnum = this.module.NoteResolution.EighthNoteTriplet;
                     else if (event.data.value === 5) resEnum = this.module.NoteResolution.SixteenthNote;
+                    else if (event.data.value === 6) resEnum = this.module.NoteResolution.SmartMixed;
                     else resEnum = this.module.NoteResolution.QuarterNote;
                     
                     this.engine.setTargetResolution(resEnum);

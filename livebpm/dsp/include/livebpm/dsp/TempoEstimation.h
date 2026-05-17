@@ -18,7 +18,8 @@ public:
     TempoResult estimate(const float* novelty, int length,
                          double featureRate,
                          double minBpm, double maxBpm,
-                         double lastBpm, double currentConfidence);
+                         double lastBpm, double currentConfidence,
+                         bool useSmartMixedMode = false);
 
 private:
     int maxLength_;

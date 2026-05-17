@@ -37,7 +37,8 @@ TempoEstimation::~TempoEstimation() {
 TempoResult TempoEstimation::estimate(const float* novelty, int length,
                                        double featureRate,
                                        double minBpm, double maxBpm,
-                                       double lastBpm, double currentConfidence)
+                                       double lastBpm, double currentConfidence,
+                                       bool useSmartMixedMode)
 {
     if (length < 2) return TempoResult{};
 
@@ -90,6 +91,28 @@ TempoResult TempoEstimation::estimate(const float* novelty, int length,
         double rawScore = autocorr_[lag];
         double currentBpm = 60.0 * featureRate / lag;
 
+        // If smart mode is enabled, fold the 8th and 16th note energy back into the 1/4 note score
+        if (useSmartMixedMode) {
+            int lag8th = lag / 2;
+            if (lag8th > 0) {
+                rawScore += (autocorr_[lag8th] * 0.5); 
+            }
+
+            int lag16th = lag / 4;
+            if (lag16th > 0) {
+                rawScore += (autocorr_[lag16th] * 0.25); 
+            }
+
+            if (currentBpm > 135.0) {
+                int lagHalfTime = lag * 2;
+                if (lagHalfTime < length) {
+                    if (autocorr_[lagHalfTime] > (autocorr_[lag] * 0.4)) {
+                        rawScore *= 0.5;
+                    }
+                }
+            }
+        }
+
         // Log-Gaussian Weighting
         double weight = std::exp(-0.5 * std::pow(std::log2(currentBpm / centerBpm) / dynamicWidth, 2.0));
         double biasedScore = rawScore * weight;
@@ -110,13 +133,16 @@ TempoResult TempoEstimation::estimate(const float* novelty, int length,
     // Calculate the BPM of our biased winner
     double finalBpm = 60.0 * featureRate / bestLag;
 
-    // --- Step 3: Breakthrough Logic for Strong Unbiased Peaks ---
-    double biasedWinnerRawScore = autocorr_[bestLag];
-    
-    if (std::abs(rawWinnerBpm - (finalBpm * 2.0)) < 10.0) {
-        if (bestRawScore > biasedWinnerRawScore * 0.95) {
-            finalBpm = rawWinnerBpm;
-            return TempoResult{ finalBpm, static_cast<float>(bestRawScore) };
+    // Disable breakthrough logic in SmartMixed mode
+    if (!useSmartMixedMode) {
+        // --- Step 3: Breakthrough Logic for Strong Unbiased Peaks ---
+        double biasedWinnerRawScore = autocorr_[bestLag];
+        
+        if (std::abs(rawWinnerBpm - (finalBpm * 2.0)) < 10.0) {
+            if (bestRawScore > biasedWinnerRawScore * 0.95) {
+                finalBpm = rawWinnerBpm;
+                return TempoResult{ finalBpm, static_cast<float>(bestRawScore) };
+            }
         }
     }
 

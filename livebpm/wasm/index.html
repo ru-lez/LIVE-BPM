@@ -71,6 +71,10 @@
 
         <div class="note-resolution">
             <label>
+                <input type="radio" name="resolution" value="6" onchange="updateNoteResolution(this.value)"> 
+                Smart
+            </label>
+            <label>
                 <input type="radio" name="resolution" value="1" onchange="updateNoteResolution(this.value)"> 
                 1/2 Note
             </label>
@@ -105,7 +109,7 @@
         let currentDisplayBpm = 0.0;
         const ALPHA = 0.15; // EMA smoothing factor (lower = smoother)
         const CONF_THRESHOLD = 0.45; // Ignore incoming BPMs if confidence is below this
-        let VISUAL_DEADZONE = 0.2; // BPM changes smaller than this won't update the display to prevent jitter
+        let VISUAL_DEADZONE = 0.2; // BPM changes smaller than this won't update the display to prevent jitter. Default value, will be overridden by worklet message
 
         window.startAudio = async function() {
             const btn = document.getElementById('startBtn');
@@ -178,6 +182,10 @@
                     type: 'setResolution',
                     value: parseInt(value)
                 });
+                // Flush the UI state so it snaps to the new reading instantly
+                currentDisplayBpm = 0.0;
+                document.getElementById('bpmDisplay').textContent = '--';
+                document.getElementById('confidenceFill').style.width = '0%';
             }
         };
 
@@ -207,7 +215,6 @@
 
                 
                 // Magnetic Snapping
-                // If BPM is within 0.25 of a whole number, snap to it
                 let nearestWhole = Math.round(targetDisplayValue);
                 if (Math.abs(targetDisplayValue - nearestWhole) < 0.15) {
                     targetDisplayValue = nearestWhole;

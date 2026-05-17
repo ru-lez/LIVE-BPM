@@ -8,7 +8,8 @@ namespace livebpm {
         QuarterNote = 2,        // Default (x 1.0)
         EighthNote = 3,         // Multiplies BPM by 0.5
         EighthNoteTriplet = 4,  // Multiplies BPM by 0.6667 
-        SixteenthNote = 5       // Multiplies BPM by 0.25 
+        SixteenthNote = 5,       // Multiplies BPM by 0.25 
+        SmartMixed = 6          // Dynamically choose between quarter and eighth based on signal characteristics
     };
 
     struct Config {
@@ -23,8 +24,8 @@ namespace livebpm {
         double doubleTimeJumpThreshold = 20.0;
         double halfTimeJumpThreshold = 10.0;
 
-        // Noise Gating threshold (Default: 0.02)
-        double SILENCE_THRESHOLD = 0.02;
+        // Noise Gating threshold (Default: 0.03)
+        double SILENCE_THRESHOLD = 0.03;
 
         // Visual Deadzone for display smoothing (Default: 0.1 BPM For Accuracy, increase to ~0.2 BPM to prevent jitter)
         double VISUAL_DEADZONE = 0.1;

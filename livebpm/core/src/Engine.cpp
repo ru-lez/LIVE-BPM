@@ -1,3 +1,52 @@
+/**
+ * Engine Overview: Real-Time BPM & Beat Tracking
+ * 
+ * This engine estimates tempo and beat alignment for live audio streams.
+ * It chops the incoming audio into overlapping FFT windows to build a novelty curve.
+ * Then, it feeds that data into a rolling history buffer by using periodicity and dynamic
+ * programming to lock onto the tempo.
+ *
+ * 
+ * How it Works
+ *
+ * - Getting the Novelty Curve (Onset Detection)
+ *   First, the FFT magnitues and phases for each audio block are calculated. 
+ *   To find the notes, a dual-stream approach is used:
+ *     1. Semitone/Super Flux: Tracks energy shifts across log-spaced semitone bands.
+ *        It handles hard transients, like percussion.
+ *     2. Complex Domain Flux: Tracks both magnitude and phase. It's used to catch the
+ *        softer legato transitions (like vocals or bowed strings) that pure magnitude
+ *        methods usually miss.
+ *   Both streams are run through separate moving averages to create an adaptive gating threshold.
+ *   Then, they are fused together and a logarithmic compression is applied to get the
+ *   final gated novelty curve.
+ *
+ * - Getting the Right Tempo
+ *   The periodic structure of the novelty buffer is analysed to find the main pulse.
+ *   The search window is dynamically scaled depending on the target note resolution.
+ *   (e.g. 16th notes vs half notes)
+ *
+ * - Stablising Readings (Post-Processing & Hysteresis)
+ *   Heuristics are applied as raw tempo maths can be jumpy. The engine looks for strumming or
+ *   tapping patterns by analysing amplitude peaks, which helps prevent accidental double-time
+ *   BPM readings. A Hysteresis lock is also implemented where if the audio signal is muddy or
+ *   ambiguous, the engine holds onto the last stable BPM instead of jumping to half-time or
+ *   double-time.
+ * 
+ * - UI Smoothing (WASM & CLI Integration)
+ *   Due to the core engine designed to output raw precision, the CLI and WASM front-ends
+ *   implement smoothing layers to prevent jittery displays and to enhance readability.
+ *     1. Magnetic Snapping: BPM readings that are within close thresholds of close numbers
+ *        are snapped to those numbers. (e.g. 127.9 BPM would snap to 128 BPM)
+ *     2. Confidence Gating: The BPM display is only updated when the engine has a high
+ *        confidence reading, preventing erratic jumps when the signal is weak or ambiguous.
+ *   Ensuring these smoothing layers are implemented at the front-end layer allows the 
+ *   core engine to remain 100% analytical and precise, while the user interfaces 
+ *   (CLI and WASM) can focus on readability and usability.
+ */
+
+ 
+
 #include "livebpm/Engine.h"
 #include "livebpm/dsp/SpectralAnalysis.h"
 #include "livebpm/dsp/OnsetDetection.h"
@@ -15,89 +64,418 @@
 namespace livebpm {
 
 struct Engine::Impl {
+    // Magic numbers
+    static constexpr float GATING_OFFSET = 0.015f;
+    static constexpr float GATING_ALPHA = 0.1f;
+    static constexpr float FLUX_COMPRESSION_LAMBDA = 50.0f;
+    static constexpr double FAST_TEMPO_THRESHOLD = 140.0;
+    static constexpr double SILENCE_TIMEOUT_SEC = 2.0;
+    static constexpr int WARMUP_HOPS = 50;
+
     Config config;
-    int fftSize;
-    int hopSize;
-    int numBins;
-    double featureRate;
+
+    // FFT and buffer state
+    struct FFTState {
+        int fftSize;
+        int hopSize;
+        int numBins;
+        double featureRate;
+        std::vector<float> window;
+        std::vector<float> currentMag;
+        std::vector<float> previousMag;          // for complex domain
+        std::vector<float> phase;
+        std::vector<float> previousPhase;        // for complex domain
+        std::vector<float> previousPreviousPhase; // for complex domain
+        float currentWindowMaxAmp = 0.0f;
+    } fft;
+
+    // Semitone filter bank state
+    struct FilterBankState {
+        std::vector<float> filterBank;
+        std::vector<float> currentBandEnergies;
+        std::vector<float> previousBandEnergies;
+        int numSemitoneBands = 0;
+    } filterBank;
+
+    // Adaptive gating state
+    struct GatingState {
+        // Adaptive gating - independent moving averages per stream
+        float semitoneFluxMovingAverage = 0.0f;
+        float complexFluxMovingAverage = 0.0f;
+        float noveltyMovingAverage = 0.0f;
+        // Warm-up counter so we don't fuse with garbage moving averages
+        int hopsProcessed = 0;
+    } gating;
+
+    // Novelty and amplitude tracking
+    struct NoveltyState {
+        std::vector<float> noveltyBuffer;
+        std::vector<float> amplitudeBuffer;
+        int hopCounter = 0;
+        int writePos = 0;
+        int maxLength;
+    } novelty;
+
+    // Tempo tracking and hysteresis state
+    struct TempoState {
+        float smoothedAlternationRatio = 1.0f;
+        // Tempo hysteresis: hold the last stable BPM to prevent erratic jumps when the signal is weak or ambiguous
+        double currentStableBpm = 0.0;
+        int octaveMismatchCount = 0;
+        int highBpmConfirmationCount = 0;
+        int consecutiveSilenceHops = 0;
+    } tempo;
 
     dsp::RingBuffer<float> ringBuffer;
     dsp::SpectralAnalysis spectral;
-    dsp::TempoEstimation tempo;
+    dsp::TempoEstimation tempoEstimator;
     dsp::BeatTrackingDP beatTracker;
-
-    // FFT working buffers
-    std::vector<float> fftWindow;
-    std::vector<float> currentMag;
-    std::vector<float> previousMag;          // for complex domain
-    std::vector<float> phase;
-    std::vector<float> previousPhase;        // for complex domain
-    std::vector<float> previousPreviousPhase; // for complex domain
-
-    // Semitone filter bank state
-    std::vector<float> filterBank;
-    std::vector<float> currentBandEnergies;
-    std::vector<float> previousBandEnergies;
-    int numSemitoneBands = 0;
-
-    // Adaptive gating - independent moving averages per stream
-    float semitoneFluxMovingAverage = 0.0f;
-    float complexFluxMovingAverage = 0.0f;
-    float noveltyMovingAverage = 0.0f;
-    float smoothedAlternationRatio = 1.0f;
-
-    // Warm-up counter so we don't fuse with garbage moving averages
-    int hopsProcessed = 0;
-    static constexpr int warmupHops = 50;
-
-    // Novelty buffer for tempo estimation
-    std::vector<float> noveltyBuffer;
-    std::vector<float> amplitudeBuffer;
-    int hopCounter = 0;
-    int noveltyWritePos = 0;
-    int maxNoveltyLength;
-
-    // Tempo hysteresis: hold the last stable BPM to prevent erratic jumps when the signal is weak or ambiguous
-    double currentStableBpm = 0.0;
-    int octaveMismatchCount = 0;
-    int highBpmConfirmationCount = 0;
-    int consecutiveSilenceHops = 0;
 
     Impl(const Config& cfg)
         : config(cfg),
-          fftSize(1 << cfg.fftOrder),
-          hopSize(fftSize / 4),
-          numBins(fftSize / 2 + 1),
-          featureRate(cfg.sampleRate / hopSize),
-          ringBuffer(fftSize * 2),
-          spectral(fftSize),
-          tempo(static_cast<int>(cfg.analysisWindowSeconds * featureRate)),
-          fftWindow(fftSize),
-          currentMag(numBins, 0.0f),
-          previousMag(numBins, 0.0f),
-          phase(numBins, 0.0f),
-          previousPhase(numBins, 0.0f),
-          previousPreviousPhase(numBins, 0.0f)
+          ringBuffer((1 << cfg.fftOrder) * 2),
+          spectral(1 << cfg.fftOrder),
+          tempoEstimator(static_cast<int>(cfg.analysisWindowSeconds * (static_cast<double>(cfg.sampleRate) / ((1 << cfg.fftOrder) / 4)))),
+          beatTracker()
     {
+        fft.fftSize = 1 << cfg.fftOrder;
+        fft.hopSize = fft.fftSize / 4;
+        fft.numBins = fft.fftSize / 2 + 1;
+        fft.featureRate = static_cast<double>(cfg.sampleRate) / fft.hopSize;
+
+        fft.window.resize(fft.fftSize, 0.0f);
+        fft.currentMag.resize(fft.numBins, 0.0f);
+        fft.previousMag.resize(fft.numBins, 0.0f);
+        fft.phase.resize(fft.numBins, 0.0f);
+        fft.previousPhase.resize(fft.numBins, 0.0f);
+        fft.previousPreviousPhase.resize(fft.numBins, 0.0f);
+
         // Build filter bank once at startup
-        filterBank = dsp::OnsetDetection::buildSemitoneFilterBank(
-            numBins,
+        filterBank.filterBank = dsp::OnsetDetection::buildSemitoneFilterBank(
+            fft.numBins,
             static_cast<float>(cfg.sampleRate),
-            fftSize,
+            fft.fftSize,
             55.0f,    // A1 lower bound
             8000.0f   // ~B8 upper bound
         );
 
-        numSemitoneBands = static_cast<int>(filterBank.size()) / numBins;
-        currentBandEnergies.resize(numSemitoneBands, 0.0f);
-        previousBandEnergies.resize(numSemitoneBands, 0.0f);
+        filterBank.numSemitoneBands = static_cast<int>(filterBank.filterBank.size()) / fft.numBins;
+        filterBank.currentBandEnergies.resize(filterBank.numSemitoneBands, 0.0f);
+        filterBank.previousBandEnergies.resize(filterBank.numSemitoneBands, 0.0f);
 
-        maxNoveltyLength = static_cast<int>(cfg.analysisWindowSeconds * featureRate);
-        noveltyBuffer.resize(maxNoveltyLength, 0.0f);
-        amplitudeBuffer.resize(maxNoveltyLength, 0.0f);
+        novelty.maxLength = static_cast<int>(cfg.analysisWindowSeconds * fft.featureRate);
+        novelty.noveltyBuffer.resize(novelty.maxLength, 0.0f);
+        novelty.amplitudeBuffer.resize(novelty.maxLength, 0.0f);
+
         std::cout << "[Engine] Initialised semitone filter bank: "
-                  << numSemitoneBands << " bands\n";
+                  << filterBank.numSemitoneBands << " bands\n";
         std::cout << "[Engine] Onset detection: semitone flux + complex domain (fused)\n";
+    }
+
+    // Helper methods
+    void flushTrackingState() {
+        // Flush the hysteresis and tracking state
+        tempo.currentStableBpm = 0.0;
+        tempo.octaveMismatchCount = 0;
+        tempo.highBpmConfirmationCount = 0;
+        tempo.smoothedAlternationRatio = 1.0f;
+        tempo.consecutiveSilenceHops = 0;
+
+        // Clear gating moving averages
+        gating.hopsProcessed = 0;
+        gating.noveltyMovingAverage = 0.0f;
+        gating.semitoneFluxMovingAverage = 0.0f;
+        gating.complexFluxMovingAverage = 0.0f;
+        
+        // Flush rolling history
+        std::fill(novelty.noveltyBuffer.begin(), novelty.noveltyBuffer.end(), 0.0f);
+        std::fill(novelty.amplitudeBuffer.begin(), novelty.amplitudeBuffer.end(), 0.0f);
+        novelty.writePos = 0;
+        novelty.hopCounter = 0;
+        gating.hopsProcessed = 0;
+    }
+
+    bool hasEnoughDataForAnalysis() const {
+        return novelty.hopCounter >= fft.hopSize && ringBuffer.available() >= fft.fftSize;
+    }
+
+    void readNextWindowAndComputeFFT() {
+        novelty.hopCounter -= fft.hopSize;
+
+        // Read FFT window
+        ringBuffer.readLatest(fft.window.data(), fft.fftSize);
+
+        // Calculate max amplitude for this specific window for noise gating
+        fft.currentWindowMaxAmp = 0.0f;
+        for (int i = 0; i < fft.fftSize; ++i) {
+            float absSample = std::abs(fft.window[i]);
+            if (absSample > fft.currentWindowMaxAmp) {
+                fft.currentWindowMaxAmp = absSample;
+            }
+        }
+
+        // FFT
+        spectral.compute(fft.window.data(), fft.currentMag.data(), fft.phase.data());
+    }
+
+    float calculateNoveltyFlux() {
+        // ---- Stream 1: Semitone Filter Bank Flux (Pertusa & Iñesta 2009) ----
+        // Robust to vibrato and minor harmonic drift. Strong on percussion and
+        // articulated harmonic instruments. Output is normalised to ~[0, 1].
+        float semitoneFlux = dsp::OnsetDetection::superFlux(
+            fft.currentMag.data(),
+            filterBank.previousBandEnergies.data(),
+            filterBank.currentBandEnergies.data(),
+            filterBank.filterBank.data(),
+            fft.numBins,
+            filterBank.numSemitoneBands,
+            1 // maxFilterWidth
+        );
+
+        // ---- Stream 2: Complex Domain (Duxbury et al. 2003) ----
+        // Catches phase-only onsets that magnitude-based detectors miss
+        // (bowed strings transitioning notes, sustained vocals).
+        // Raw scale depends on signal amplitude - normalised below.
+        float complexFlux = dsp::OnsetDetection::complexDomain(
+            fft.currentMag.data(),
+            fft.phase.data(),
+            fft.previousMag.data(),
+            fft.previousPhase.data(),
+            fft.previousPreviousPhase.data(),
+            fft.numBins
+        );
+
+        // ---- Adaptive gating - each stream against its own moving average ----
+        float semitoneThreshold = gating.semitoneFluxMovingAverage + GATING_OFFSET;
+        float gatedSemitone = (semitoneFlux > semitoneThreshold)
+            ? (semitoneFlux - gating.semitoneFluxMovingAverage)
+            : 0.0f;
+        gating.semitoneFluxMovingAverage =
+            GATING_ALPHA * semitoneFlux + (1.0f - GATING_ALPHA) * gating.semitoneFluxMovingAverage;
+
+        float complexThreshold = gating.complexFluxMovingAverage + GATING_OFFSET;
+        float gatedComplex = (complexFlux > complexThreshold)
+            ? (complexFlux - gating.complexFluxMovingAverage)
+            : 0.0f;
+        gating.complexFluxMovingAverage =
+            GATING_ALPHA * complexFlux + (1.0f - GATING_ALPHA) * gating.complexFluxMovingAverage;
+
+        // ---- Normalise complex stream to comparable scale ----
+        // Semitone flux is bounded [0, 1]; complex domain isn't. Dividing by
+        // its moving average puts both streams on roughly equal footing.
+        const float epsilon = 1e-6f;
+        float normalisedComplex = gatedComplex / (gating.complexFluxMovingAverage + epsilon);
+        // Clamp to prevent blow-ups when moving average is still warming up
+        normalisedComplex = std::min(normalisedComplex, 1.0f);
+
+        // ---- Fuse the two streams ----
+        // Weighted sum - semitone flux leads (more reliable, well-bounded);
+        // complex domain contributes legato/phase-onset information.
+        // During warm-up, rely on semitone flux only since complex MA is unreliable.
+        float combinedFlux;
+        if (gating.hopsProcessed < WARMUP_HOPS) {
+            combinedFlux = gatedSemitone;
+        } else {
+            combinedFlux = 0.6f * gatedSemitone + 0.4f * normalisedComplex;
+        }
+
+        // Logarithmic compression
+        return std::log1p(FLUX_COMPRESSION_LAMBDA * combinedFlux);
+    }
+
+    void updateSilenceAndGating(float rawNovelty) {
+        // If the audio window is just room noise, force the novelty peak to zero
+        if (fft.currentWindowMaxAmp < config.SILENCE_THRESHOLD) {
+            rawNovelty = 0.0f;
+            tempo.consecutiveSilenceHops++;
+
+            // Only bleed the engine state if the silence has lasted for > 2 seconds
+            // featureRate = hops per second, so 2.0 * featureRate = 2 seconds
+            if (tempo.consecutiveSilenceHops > static_cast<int>(SILENCE_TIMEOUT_SEC * fft.featureRate)) {
+                tempo.currentStableBpm = tempo.currentStableBpm * 0.95; 
+                tempo.highBpmConfirmationCount = 0; 
+                tempo.octaveMismatchCount = 0; 
+            }
+        } else {
+            // As soon as we hear audio, reset the silence timer
+            tempo.consecutiveSilenceHops = 0;
+        }
+
+        // Apply a smoothing filter to round off jagged legato peaks
+        gating.noveltyMovingAverage = 0.6f * gating.noveltyMovingAverage + 0.4f * rawNovelty;
+        float noveltyVal = gating.noveltyMovingAverage;
+
+        // Store in novelty buffer
+        if (novelty.writePos < novelty.maxLength) {
+            novelty.noveltyBuffer[novelty.writePos] = noveltyVal;
+            novelty.amplitudeBuffer[novelty.writePos] = fft.currentWindowMaxAmp;
+            novelty.writePos++;
+        } else {
+            std::move(novelty.noveltyBuffer.begin() + 1,
+                      novelty.noveltyBuffer.end(),
+                      novelty.noveltyBuffer.begin());
+            novelty.noveltyBuffer.back() = noveltyVal;
+
+            std::move(novelty.amplitudeBuffer.begin() + 1,
+                      novelty.amplitudeBuffer.end(),
+                      novelty.amplitudeBuffer.begin());
+            novelty.amplitudeBuffer.back() = fft.currentWindowMaxAmp;
+        }
+    }
+
+    void shiftBuffers() {
+        // ---- Shift state for next iteration ----
+        // Band energies (for semitone flux)
+        std::copy(filterBank.currentBandEnergies.begin(),
+                  filterBank.currentBandEnergies.end(),
+                  filterBank.previousBandEnergies.begin());
+
+        // Magnitude (for complex domain)
+        std::copy(fft.currentMag.begin(),
+                  fft.currentMag.end(),
+                  fft.previousMag.begin());
+
+        // Phase history (two frames back, for complex domain)
+        std::copy(fft.previousPhase.begin(),
+                  fft.previousPhase.end(),
+                  fft.previousPreviousPhase.begin());
+        std::copy(fft.phase.begin(),
+                  fft.phase.end(),
+                  fft.previousPhase.begin());
+
+        gating.hopsProcessed++;
+    }
+
+    int getNoveltyLength() const {
+        return std::min(novelty.writePos, novelty.maxLength);
+    }
+
+    double estimateRawTempo(float inputScale, bool useSmartMixedMode, double& outConfidence) {
+        int noveltyLen = getNoveltyLength();
+        
+        // Dynamic Window Shift
+        double currentMinBpm = config.minBpm * inputScale;
+        double currentMaxBpm = config.maxBpm * inputScale;
+
+        // Scale the center bias so the estimator doesn't drag subdivisions back to 1/4 notes
+        double trackingBpm = (tempo.currentStableBpm > 0.0) ? tempo.currentStableBpm : 100.0;
+        double scaledTrackingBpm = trackingBpm * inputScale;
+
+        auto tempoResult = tempoEstimator.estimate(
+            novelty.noveltyBuffer.data(), noveltyLen,
+            fft.featureRate, currentMinBpm, currentMaxBpm,
+            scaledTrackingBpm, outConfidence,
+            useSmartMixedMode
+        );
+        
+        return tempoResult.bpm;
+    }
+
+    void applyAlternationHeuristics(double& currentBpm) {
+        int noveltyLen = getNoveltyLength();
+
+        // --- A. Analyse (Alternation Check) ---
+        if (currentBpm > FAST_TEMPO_THRESHOLD) { 
+            int beatLag = static_cast<int>(60.0 / currentBpm * fft.featureRate);
+            
+            if (noveltyLen > beatLag * 4) {
+                float evenPeaks = 0.0f;
+                float oddPeaks = 0.0f;
+                int searchWindow = std::max(4, static_cast<int>(beatLag * 0.15f));
+
+                for (int i = 0; i < 8; ++i) {
+                    // Look backward from the most recent write position
+                    int targetPos = (noveltyLen - 1) - (i * beatLag);
+                    
+                    float localMax = 0.0f; 
+                    for (int w = -searchWindow; w <= searchWindow; ++w) {
+                        int idx = targetPos + w;
+                        if (idx >= 0 && idx < noveltyLen) {
+                            localMax = std::max(localMax, novelty.amplitudeBuffer[idx]);
+                        }
+                    }
+
+                    if (i % 2 == 0) evenPeaks += localMax;
+                    else oddPeaks += localMax;
+                }
+
+                float rawRatio = std::max(evenPeaks, oddPeaks) / (std::min(evenPeaks, oddPeaks) + 1e-6f);
+                rawRatio = std::min(rawRatio, 10.0f);
+
+                tempo.smoothedAlternationRatio = (0.1f * rawRatio) + (0.9f * tempo.smoothedAlternationRatio);
+            }
+        } else {
+            tempo.smoothedAlternationRatio = (0.1f * 1.0f) + (0.9f * tempo.smoothedAlternationRatio);
+        }
+
+        // --- B. Veto (Hysteresis Logic) ---
+        float dynamicThreshold = 1.4f; // Neutral / Startup
+        if (tempo.currentStableBpm > 150.0) {
+            dynamicThreshold = 1.8f; // Very loose if already at high speed
+        } else if (tempo.currentStableBpm > 0.0 && tempo.currentStableBpm < 110.0) {
+            dynamicThreshold = 1.15f; // Strict if locked at slow speed
+        }
+
+        if (currentBpm > FAST_TEMPO_THRESHOLD) {
+            int beatLag = static_cast<int>(60.0 / currentBpm * fft.featureRate);
+            
+            // Veto if there is enough data
+            if (noveltyLen > beatLag * 4) {
+                if (tempo.smoothedAlternationRatio > dynamicThreshold) {
+                    // Strum-Tap
+                    currentBpm *= 0.5;
+                    tempo.highBpmConfirmationCount = std::max(0, tempo.highBpmConfirmationCount - 2); 
+                } else {
+                    // Fast Tempo, Increment streak
+                    tempo.highBpmConfirmationCount = std::min(20, tempo.highBpmConfirmationCount + 1);
+                }
+            } else {
+                tempo.highBpmConfirmationCount = 12; 
+            }
+        } else {
+            tempo.highBpmConfirmationCount = std::max(0, tempo.highBpmConfirmationCount - 1);
+        }
+    }
+
+    void applyHysteresisAndCommit(double& currentBpm) {
+        // --- C. COMMIT (Hysteresis/Escape Hatch) ---
+        if (tempo.currentStableBpm == 0.0) {
+            tempo.currentStableBpm = currentBpm;
+        } else {
+            bool isOctaveError = false;
+            
+            // Defending against double-time and half-time jumps
+            if (std::abs(currentBpm - (tempo.currentStableBpm * 2.0)) < config.doubleTimeJumpThreshold) {
+                tempo.octaveMismatchCount++;
+                isOctaveError = true;
+            } else if (std::abs(currentBpm - (tempo.currentStableBpm * 0.5)) < config.halfTimeJumpThreshold) {
+                tempo.octaveMismatchCount++;
+                isOctaveError = true;
+            }
+
+            if (isOctaveError) {
+                // If it insists on the octave for 30 frames, break the lock
+                if (tempo.octaveMismatchCount > 30) {
+                    tempo.currentStableBpm = currentBpm; 
+                    tempo.octaveMismatchCount = 0;
+                } else {
+                    // Clamp it to the stable reading
+                    currentBpm = tempo.currentStableBpm; 
+                }
+            } else {
+                tempo.octaveMismatchCount = 0; 
+                // Smoothing and Hard Resets
+                if (std::abs(currentBpm - tempo.currentStableBpm) > 20.0) {
+                    // Hard reset if it's a massive shift
+                    tempo.currentStableBpm = currentBpm;
+                } else {
+                    // Stiffen the glide so FFT window drift can't drag it down
+                    tempo.currentStableBpm = 0.95 * tempo.currentStableBpm + 0.05 * currentBpm;
+                    // Assign the smoothed value back
+                    currentBpm = tempo.currentStableBpm;
+                }
+            }
+        }
     }
 };
 
@@ -113,300 +491,63 @@ void Engine::processBlock(const float* samples, int numSamples) {
     auto& d = *pImpl_;
 
     d.ringBuffer.write(samples, numSamples);
-    d.hopCounter += numSamples;
+    d.novelty.hopCounter += numSamples;
 
-    while (d.hopCounter >= d.hopSize && d.ringBuffer.available() >= d.fftSize) {
-        d.hopCounter -= d.hopSize;
-
-        // Read FFT window
-        d.ringBuffer.readLatest(d.fftWindow.data(), d.fftSize);
-
-        // Calculate max amplitude for this specific window for noise gating
-        float windowMaxAmp = 0.0f;
-        for (int i = 0; i < d.fftSize; ++i) {
-            float absSample = std::abs(d.fftWindow[i]);
-            if (absSample > windowMaxAmp) {
-                windowMaxAmp = absSample;
-            }
-        }
-
-        // FFT
-        d.spectral.compute(d.fftWindow.data(),
-                           d.currentMag.data(),
-                           d.phase.data());
-
-        // ---- Stream 1: Semitone Filter Bank Flux (Pertusa & Iñesta 2009) ----
-        // Robust to vibrato and minor harmonic drift. Strong on percussion and
-        // articulated harmonic instruments. Output is normalised to ~[0, 1].
-        float semitoneFlux = dsp::OnsetDetection::superFlux(
-            d.currentMag.data(),
-            d.previousBandEnergies.data(),
-            d.currentBandEnergies.data(),
-            d.filterBank.data(),
-            d.numBins,
-            d.numSemitoneBands,
-            1 // maxFilterWidth
-        );
-
-        // ---- Stream 2: Complex Domain (Duxbury et al. 2003) ----
-        // Catches phase-only onsets that magnitude-based detectors miss
-        // (bowed strings transitioning notes, sustained vocals).
-        // Raw scale depends on signal amplitude - normalised below.
-        float complexFlux = dsp::OnsetDetection::complexDomain(
-            d.currentMag.data(),
-            d.phase.data(),
-            d.previousMag.data(),
-            d.previousPhase.data(),
-            d.previousPreviousPhase.data(),
-            d.numBins
-        );
-
-        // ---- Adaptive gating - each stream against its own moving average ----
-        const float gateOffset = 0.015f;
-        const float alpha = 0.1f;
-
-        float semitoneThreshold = d.semitoneFluxMovingAverage + gateOffset;
-        float gatedSemitone = (semitoneFlux > semitoneThreshold)
-            ? (semitoneFlux - d.semitoneFluxMovingAverage)
-            : 0.0f;
-        d.semitoneFluxMovingAverage =
-            alpha * semitoneFlux + (1.0f - alpha) * d.semitoneFluxMovingAverage;
-
-        float complexThreshold = d.complexFluxMovingAverage + gateOffset;
-        float gatedComplex = (complexFlux > complexThreshold)
-            ? (complexFlux - d.complexFluxMovingAverage)
-            : 0.0f;
-        d.complexFluxMovingAverage =
-            alpha * complexFlux + (1.0f - alpha) * d.complexFluxMovingAverage;
-
-        // ---- Normalise complex stream to comparable scale ----
-        // Semitone flux is bounded [0, 1]; complex domain isn't. Dividing by
-        // its moving average puts both streams on roughly equal footing.
-        const float epsilon = 1e-6f;
-        float normalisedComplex = gatedComplex / (d.complexFluxMovingAverage + epsilon);
-        // Clamp to prevent blow-ups when moving average is still warming up
-        normalisedComplex = std::min(normalisedComplex, 1.0f);
-
-        // ---- Fuse the two streams ----
-        // Weighted sum - semitone flux leads (more reliable, well-bounded);
-        // complex domain contributes legato/phase-onset information.
-        // During warm-up, rely on semitone flux only since complex MA is unreliable.
-        float combinedFlux;
-        if (d.hopsProcessed < d.warmupHops) {
-            combinedFlux = gatedSemitone;
-        } else {
-            combinedFlux = 0.6f * gatedSemitone + 0.4f * normalisedComplex;
-        }
-
-        // Logarithmic compression
-        const float lambda = 50.0f;
-        float rawNovelty = std::log1p(lambda * combinedFlux);
-
-        // If the audio window is just room noise, force the novelty peak to zero
-        if (windowMaxAmp < d.config.SILENCE_THRESHOLD) {
-            rawNovelty = 0.0f;
-            d.consecutiveSilenceHops++;
-
-            // Only bleed the engine state if the silence has lasted for > 2 seconds
-            // featureRate = hops per second, so 2.0 * featureRate = 2 seconds
-            if (d.consecutiveSilenceHops > static_cast<int>(2.0 * d.featureRate)) {
-                d.currentStableBpm = d.currentStableBpm * 0.95; 
-                d.highBpmConfirmationCount = 0; 
-                d.octaveMismatchCount = 0; 
-            }
-        } else {
-            // As soon as we hear audio, reset the silence timer
-            d.consecutiveSilenceHops = 0;
-        }
-
-        // Apply a smoothing filter to round off jagged legato peaks
-        d.noveltyMovingAverage = 0.6f * d.noveltyMovingAverage + 0.4f * rawNovelty;
-        float novelty = d.noveltyMovingAverage;
-
-        /*
-        #ifdef LIVEBPM_DEBUG
-                std::cout << "Semi: " << std::fixed << std::setprecision(4) << gatedSemitone
-                          << " | Cplx: " << normalisedComplex
-                          << " | Combined: " << combinedFlux
-                          << " | Novelty: " << novelty << "\n";
-        #endif
-        */
-
-        // Store in novelty buffer
-        if (d.noveltyWritePos < d.maxNoveltyLength) {
-            d.noveltyBuffer[d.noveltyWritePos] = novelty;
-            d.amplitudeBuffer[d.noveltyWritePos] = windowMaxAmp;
-            d.noveltyWritePos++;
-        } else {
-            std::move(d.noveltyBuffer.begin() + 1,
-                      d.noveltyBuffer.end(),
-                      d.noveltyBuffer.begin());
-            d.noveltyBuffer.back() = novelty;
-        }
-
-        // ---- Shift state for next iteration ----
-        // Band energies (for semitone flux)
-        std::copy(d.currentBandEnergies.begin(),
-                  d.currentBandEnergies.end(),
-                  d.previousBandEnergies.begin());
-
-        // Magnitude (for complex domain)
-        std::copy(d.currentMag.begin(),
-                  d.currentMag.end(),
-                  d.previousMag.begin());
-
-        // Phase history (two frames back, for complex domain)
-        std::copy(d.previousPhase.begin(),
-                  d.previousPhase.end(),
-                  d.previousPreviousPhase.begin());
-        std::copy(d.phase.begin(),
-                  d.phase.end(),
-                  d.previousPhase.begin());
-
-        d.hopsProcessed++;
+    while (d.hasEnoughDataForAnalysis()) {
+        d.readNextWindowAndComputeFFT();
+        
+        float rawNovelty = d.calculateNoveltyFlux();
+        d.updateSilenceAndGating(rawNovelty);
+        d.shiftBuffers();
     }
 
     // Re-estimate tempo
-    int noveltyLen = std::min(d.noveltyWritePos, d.maxNoveltyLength);
+    int noveltyLen = d.getNoveltyLength();
+
     if (noveltyLen > 50) {
         
         // Mathematical scale based on user input
         float inputScale = 1.0f;
+        bool useSmartMixedMode = false;
+        
         if (d.config.targetResolution == NoteResolution::SixteenthNote) inputScale = 4.0f;
         else if (d.config.targetResolution == NoteResolution::EighthNoteTriplet) inputScale = 3.0f;
         else if (d.config.targetResolution == NoteResolution::EighthNote) inputScale = 2.0f;
         else if (d.config.targetResolution == NoteResolution::HalfNote) inputScale = 0.5f;
+        else if (d.config.targetResolution == NoteResolution::SmartMixed) { inputScale = 1.0f; useSmartMixedMode = true; }
 
-        // Dynamic Window Shift (Allowing engine to search up to 360+ BPM for 16ths)
-        double currentMinBpm = std::min(d.config.minBpm, (double)(d.config.minBpm * inputScale));
-        double currentMaxBpm = std::max(d.config.maxBpm, (double)(d.config.maxBpm * inputScale));
+        double rawBpm = d.estimateRawTempo(inputScale, useSmartMixedMode, latestResult_.confidence);
 
-        auto tempoResult = d.tempo.estimate(
-            d.noveltyBuffer.data(), noveltyLen,
-            d.featureRate, currentMinBpm, currentMaxBpm,
-            d.currentStableBpm, latestResult_.confidence
-        );
-
-        if (tempoResult.bpm > 0) {
-            
-            std::cout << "[DSP] Raw Detected: " << tempoResult.bpm 
-                      << " | Stable: " << d.currentStableBpm 
-                      << " | Ratio: " << d.smoothedAlternationRatio << "\n";
-            
+        if (rawBpm > 0) {
+        /* DEBUG LOGGING
+            std::cout << "[DSP] Raw Detected: " << rawBpm 
+                      << " | Stable: " << d.tempo.currentStableBpm 
+                      << " | Ratio: " << d.tempo.smoothedAlternationRatio << "\n";
+        */
             
             // Immediately scale the detected pulse back to Master 1/4 Note Tempo
-            tempoResult.bpm /= inputScale;
+            rawBpm /= inputScale;
 
-            // --- A. ANALYZE (Alternation Check) ---
-            if (tempoResult.bpm > 140.0) { 
-                int beatLag = static_cast<int>(60.0 / tempoResult.bpm * d.featureRate);
-                
-                if (noveltyLen > beatLag * 4) {
-                    float evenPeaks = 0.0f;
-                    float oddPeaks = 0.0f;
-                    int searchWindow = 4;
+            d.applyAlternationHeuristics(rawBpm);
+            d.applyHysteresisAndCommit(rawBpm);
 
-                    for (int i = 0; i < 4; ++i) {
-                        // Look backward from the most recent write position
-                        int targetPos = (noveltyLen - 1) - (i * beatLag);
-                        
-                        float localMax = 0.0f; 
-                        for (int w = -searchWindow; w <= searchWindow; ++w) {
-                            int idx = targetPos + w;
-                            if (idx >= 0 && idx < noveltyLen) {
-                                localMax = std::max(localMax, d.amplitudeBuffer[idx]);
-                            }
-                        }
-
-                        if (i % 2 == 0) evenPeaks += localMax;
-                        else oddPeaks += localMax;
-                    }
-
-                    float rawRatio = std::max(evenPeaks, oddPeaks) / (std::min(evenPeaks, oddPeaks) + 1e-6f);
-                    rawRatio = std::min(rawRatio, 10.0f);
-
-                    d.smoothedAlternationRatio = (0.3f * rawRatio) + (0.7f * d.smoothedAlternationRatio);
-                }
-            } else {
-                d.smoothedAlternationRatio = (0.1f * 1.0f) + (0.9f * d.smoothedAlternationRatio);
+            double outputBpm = rawBpm;
+            bool alreadyLockedFast = (d.tempo.currentStableBpm > d.Impl::FAST_TEMPO_THRESHOLD);
+            
+            if (!alreadyLockedFast && rawBpm > d.Impl::FAST_TEMPO_THRESHOLD && d.tempo.highBpmConfirmationCount < 12) {
+                outputBpm *= 0.5;
             }
 
-            // --- B. Veto (Hysteresis Logic) ---
-            float dynamicThreshold = 2.5f; // Neutral / Startup
-            if (d.currentStableBpm > 150.0) {
-                dynamicThreshold = 3.5f; // Very loose if already at high speed
-            } else if (d.currentStableBpm > 0.0 && d.currentStableBpm < 110.0) {
-                dynamicThreshold = 2.0f; // Strict if locked at slow speed
-            }
-
-            if (tempoResult.bpm > 140.0) {
-                int beatLag = static_cast<int>(60.0 / tempoResult.bpm * d.featureRate);
-                
-                // Veto if there is enough data
-                if (noveltyLen > beatLag * 4) {
-                    if (d.smoothedAlternationRatio > dynamicThreshold) {
-                        // Strum-Tap
-                        tempoResult.bpm *= 0.5;
-                        d.highBpmConfirmationCount = std::max(0, d.highBpmConfirmationCount - 2); 
-                    } else {
-                        // Fast Tempo, Increment streak
-                        d.highBpmConfirmationCount = std::min(20, d.highBpmConfirmationCount + 1);
-                        if (d.highBpmConfirmationCount < 12) {
-                            tempoResult.bpm *= 0.5;
-                        }
-                    }
-                } else {
-                    d.highBpmConfirmationCount = 12; 
-                }
-            } else {
-                d.highBpmConfirmationCount = 0;
-            }
-
-            // --- C. COMMIT (Hysteresis/Escape Hatch) ---
-            if (d.currentStableBpm == 0.0) {
-                d.currentStableBpm = tempoResult.bpm;
-            } else {
-                bool isOctaveError = false;
-                
-                // Defending against double-time and half-time jumps
-                if (std::abs(tempoResult.bpm - (d.currentStableBpm * 2.0)) < d.config.doubleTimeJumpThreshold) {
-                    d.octaveMismatchCount++;
-                    isOctaveError = true;
-                } else if (std::abs(tempoResult.bpm - (d.currentStableBpm * 0.5)) < d.config.halfTimeJumpThreshold) {
-                    d.octaveMismatchCount++;
-                    isOctaveError = true;
-                }
-
-                if (isOctaveError) {
-                    // If it insists on the octave for 3 frames, break the lock
-                    if (d.octaveMismatchCount > 3) {
-                        d.currentStableBpm = tempoResult.bpm; 
-                        d.octaveMismatchCount = 0;
-                    } else {
-                        // Clamp it to the stable reading
-                        tempoResult.bpm = d.currentStableBpm; 
-                    }
-                } else {
-                    d.octaveMismatchCount = 0; 
-                    // Smoothing and Hard Resets
-                    if (std::abs(tempoResult.bpm - d.currentStableBpm) > 20.0) {
-                        // Hard reset if it's a massive shift
-                        d.currentStableBpm = tempoResult.bpm;
-                    } else {
-                        // Otherwise glide smoothly
-                        d.currentStableBpm = 0.85 * d.currentStableBpm + 0.15 * tempoResult.bpm;
-                    }
-                }
-            }
-
-            // Set the beat tracker lag using the corrected BPM
-            int beatRefLag = static_cast<int>(60.0 / tempoResult.bpm * d.featureRate);
-            auto dpResult = d.beatTracker.track(d.noveltyBuffer.data(), noveltyLen, beatRefLag);
+            // Set the beat tracker lag using the resolution BPM
+            double trackingBpmForBeatTracker = outputBpm * inputScale;
+            int beatRefLag = static_cast<int>(60.0 / trackingBpmForBeatTracker * d.fft.featureRate);
+            
+            auto dpResult = d.beatTracker.track(d.novelty.noveltyBuffer.data(), noveltyLen, beatRefLag);
 
             Result result;
             
             // Assign final smoothed BPM
-            result.bpm = tempoResult.bpm; 
+            result.bpm = outputBpm; 
             result.confidence = 0.4 * dpResult.stability
                               + 0.4 * dpResult.alignment
                               + 0.2 * dpResult.coverage;
@@ -425,16 +566,20 @@ Result Engine::getLatestResult() const {
     return latestResult_;
 }
 
-void Engine::setTargetResolution(NoteResolution resolution) {
-    pImpl_->config.targetResolution = resolution;
-}
-
 double Engine::getVisualDeadzone() const {
     return pImpl_->config.VISUAL_DEADZONE;
 }
 
+void Engine::setTargetResolution(NoteResolution resolution) {
+    if (pImpl_->config.targetResolution != resolution) {
+        pImpl_->config.targetResolution = resolution;
+        
+        reset(); // Flush the engine state to prevent weirdness when switching resolutions
+    }
+}
+
 void Engine::reset() {
-    pImpl_ = std::make_unique<Impl>(pImpl_->config);
+    pImpl_->flushTrackingState();
     latestResult_ = Result{};
 }
 
