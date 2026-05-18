@@ -484,10 +484,7 @@ struct Engine::Impl {
     }
 };
 
-Engine::Engine(const Config& config)
-    : pImpl_(std::make_unique<Impl>(config))
-{
-}
+Engine::Engine(const Config& config) : pImpl_(std::make_unique<Impl>(config)) {}
 
 Engine::~Engine() = default;
 

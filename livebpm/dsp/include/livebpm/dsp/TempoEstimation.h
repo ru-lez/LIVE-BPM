@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <memory>
 
 namespace livebpm {
 namespace dsp {
@@ -22,13 +23,8 @@ public:
                          bool useSmartMixedMode = false);
 
 private:
-    int maxLength_;
-    int fftSize_;
-    void* kissConfig_;
-    void* kissInvConfig_;
-    void* fftBuf_;    // allocated as kiss_fft_cpx[]
-    void* fftResult_; // allocated as kiss_fft_cpx[]
-    float* autocorr_;
+    struct Impl; 
+    std::unique_ptr<Impl> pImpl_; 
 };
 
 }} // namespace livebpm::dsp
