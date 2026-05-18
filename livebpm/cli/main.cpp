@@ -1,193 +1,259 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
-#include "livebpm/dsp/Biquad.h"
-
 #include "livebpm/Engine.h"
+#include "livebpm/InstrumentPresets.h"
+
 #include <atomic>
 #include <chrono>
 #include <csignal>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <thread>
-#include <vector>
-#include <cmath>
 
+// ---------------------------------------------------------------------------
 // Globals
+// ---------------------------------------------------------------------------
 
 static std::atomic<bool> running{true};
 static livebpm::Engine*  g_engine = nullptr;
+static std::atomic<int>  g_resolutionChoice{2}; // 2 = QuarterNote default
+static std::atomic<int>  g_presetId{0};          // 0 = Default
 
-
+// ---------------------------------------------------------------------------
 // Callbacks
+// ---------------------------------------------------------------------------
 
-void signalHandler(int)
-{
-    running.store(false);
-}
-
-// Highpass filter instance (removes DC offset and rumble below 80Hz)
-static livebpm::dsp::Biquad highpass;
-static bool filterInitialized = false;
+void signalHandler(int) { running.store(false); }
 
 void audioCallback(ma_device* /*device*/, void* /*output*/,
                    const void* input, ma_uint32 frameCount)
 {
-    if (g_engine && input) {
-        // Initialize filter once on first callback
-        if (!filterInitialized) {
-            highpass.setCoefficients(
-                livebpm::dsp::Biquad::makeHighpass(48000.0, 80.0));
-            filterInitialized = true;
+    if (g_engine && input)
+        g_engine->processBlock(static_cast<const float*>(input),
+                               static_cast<int>(frameCount));
+}
+
+// ---------------------------------------------------------------------------
+// Resolution helpers
+// ---------------------------------------------------------------------------
+
+const char* resolutionName(livebpm::NoteResolution r)
+{
+    switch (r) {
+        case livebpm::NoteResolution::HalfNote:          return "Half note (0.5x)";
+        case livebpm::NoteResolution::QuarterNote:       return "Quarter note";
+        case livebpm::NoteResolution::EighthNote:        return "Eighth note (2x)";
+        case livebpm::NoteResolution::EighthNoteTriplet: return "Eighth triplet (3x)";
+        case livebpm::NoteResolution::SixteenthNote:     return "Sixteenth note (4x)";
+        case livebpm::NoteResolution::SmartMixed:        return "Smart / Auto";
+        default:                                          return "Unknown";
+    }
+}
+
+livebpm::NoteResolution choiceToResolution(int choice)
+{
+    switch (choice) {
+        case 1:  return livebpm::NoteResolution::HalfNote;
+        case 2:  return livebpm::NoteResolution::QuarterNote;
+        case 3:  return livebpm::NoteResolution::EighthNote;
+        case 4:  return livebpm::NoteResolution::EighthNoteTriplet;
+        case 5:  return livebpm::NoteResolution::SixteenthNote;
+        case 6:  return livebpm::NoteResolution::SmartMixed;
+        default: return livebpm::NoteResolution::QuarterNote;
+    }
+}
+
+livebpm::NoteResolution pickResolution()
+{
+    std::cout << "\nSelect note resolution:\n"
+              << "  [1] Half note\n"
+              << "  [2] Quarter note  (default)\n"
+              << "  [3] Eighth note\n"
+              << "  [4] Eighth triplet\n"
+              << "  [5] Sixteenth note\n"
+              << "  [6] Smart / Auto\n"
+              << "\nEnter choice (or press Enter for Quarter note): ";
+
+    std::string input;
+    std::getline(std::cin, input);
+    if (input.empty()) return livebpm::NoteResolution::QuarterNote;
+
+    try {
+        int choice = std::stoi(input);
+        g_resolutionChoice.store(choice);
+        return choiceToResolution(choice);
+    } catch (...) {
+        return livebpm::NoteResolution::QuarterNote;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Instrument preset helpers
+// ---------------------------------------------------------------------------
+
+const char* presetName(int id)
+{
+    switch (id) {
+        case 1: return "Flute";
+        case 2: return "Guitar";
+        case 3: return "Saxophone";
+        case 4: return "Acoustic Bass";
+        case 5: return "Cajon Flamenco";
+        default: return "Default";
+    }
+}
+
+livebpm::Config presetConfig(int id)
+{
+    switch (id) {
+        case 1: return livebpm::presets::flute();
+        case 2: return livebpm::presets::guitar();
+        case 3: return livebpm::presets::saxophone();
+        case 4: return livebpm::presets::acousticBass();
+        case 5: return livebpm::presets::cajonFlamenco();
+        default: return livebpm::Config{};
+    }
+}
+
+int pickPreset()
+{
+    std::cout << "\nSelect instrument preset:\n"
+              << "  [0] Default\n"
+              << "  [1] Flute\n"
+              << "  [2] Guitar\n"
+              << "  [3] Saxophone\n"
+              << "  [4] Acoustic Bass\n"
+              << "  [5] Cajon Flamenco\n"
+              << "\nEnter choice (or press Enter for Default): ";
+
+    std::string input;
+    std::getline(std::cin, input);
+    if (input.empty()) return 0;
+
+    try {
+        int choice = std::stoi(input);
+        if (choice >= 0 && choice <= 5) return choice;
+    } catch (...) {}
+
+    std::cout << "Invalid input — using Default.\n";
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Input thread — resolution changes and preset switches while running
+// ---------------------------------------------------------------------------
+
+void inputThread(livebpm::Engine* engine)
+{
+    std::cout << "\nType 1-6 to change resolution, or 'preset N' (0-5) to switch instrument.\n\n";
+
+    while (running.load()) {
+        std::string line;
+        if (!std::getline(std::cin, line)) break;
+        if (!running.load()) break;
+        if (line.empty()) continue;
+
+        std::istringstream ss(line);
+        std::string cmd;
+        ss >> cmd;
+
+        // Resolution change
+        if (cmd.size() == 1 && cmd[0] >= '1' && cmd[0] <= '6') {
+            int choice = cmd[0] - '0';
+            g_resolutionChoice.store(choice);
+            engine->setTargetResolution(choiceToResolution(choice));
+            std::cout << "\n  Resolution: " << resolutionName(choiceToResolution(choice)) << "\n";
+            std::cout.flush();
+            continue;
         }
 
-        const float* in = static_cast<const float*>(input);
-
-        // Filter into a temporary buffer, don't modify miniaudio's buffer
-        std::vector<float> filtered(frameCount);
-        for (ma_uint32 i = 0; i < frameCount; ++i) {
-            filtered[i] = highpass.process(in[i]);
+        // Preset switch
+        if (cmd == "preset") {
+            int id = 0;
+            if (!(ss >> id) || id < 0 || id > 5) {
+                std::cout << "\n  Usage: preset 0-5\n";
+                std::cout.flush();
+                continue;
+            }
+            engine->updateTunableConfig(presetConfig(id));
+            g_presetId.store(id);
+            std::cout << "\n  Preset: " << presetName(id) << "\n";
+            std::cout.flush();
+            continue;
         }
 
-        g_engine->processBlock(filtered.data(), static_cast<int>(frameCount));
+        std::cout << "\n  Commands: 1-6 (resolution)  |  preset 0-5 (instrument)\n";
+        std::cout.flush();
     }
 }
 
-
-// Helper functions
-
-void listDevices()
-{
-    ma_context context;
-    if (ma_context_init(nullptr, 0, nullptr, &context) != MA_SUCCESS) {
-        std::cerr << "Error: Could not initialize audio context.\n";
-        return;
-    }
-
-    ma_device_info* captureDevices;
-    ma_uint32        captureCount;
-    ma_device_info* playbackDevices;
-    ma_uint32        playbackCount;
-
-    if (ma_context_get_devices(&context,
-                                &playbackDevices, &playbackCount,
-                                &captureDevices,  &captureCount) != MA_SUCCESS) {
-        std::cerr << "Error: Could not enumerate audio devices.\n";
-        ma_context_uninit(&context);
-        return;
-    }
-
-    std::cout << "Available capture devices:\n";
-    for (ma_uint32 i = 0; i < captureCount; ++i) {
-        std::cout << "  [" << i << "] " << captureDevices[i].name;
-        if (captureDevices[i].isDefault)
-            std::cout << "  (default)";
-        std::cout << "\n";
-    }
-
-    ma_context_uninit(&context);
-}
-
-void printUsage()
-{
-    std::cout << "LiveBPM - Real-time BPM detector\n"
-              << "Usage: livebpm_cli [options]\n"
-              << "  -r <samplerate>   Sample rate   (default: 48000)\n"
-              << "  -b <blocksize>    Block size    (default: 512)\n"
-              << "  -d <index>        Device index  (default: system default)\n"
-              << "  -l                List available capture devices\n"
-              << "  -h                Show help\n"
-              << "\nPress Ctrl+C to exit.\n";
-}
-
-
+// ---------------------------------------------------------------------------
 // Main
+// ---------------------------------------------------------------------------
+
 int main(int argc, char* argv[])
 {
-    // --- Argument parsing ---
-    double sampleRate  = 48000.0;
-    int    blockSize   = 512;
+    double sampleRate = 48000.0;
+    int    blockSize  = 512;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "-r" && i + 1 < argc) {
-            sampleRate = std::stod(argv[++i]);
-        } else if (arg == "-b" && i + 1 < argc) {
-            blockSize = std::stoi(argv[++i]);
-        } else if (arg == "-h") {
-            printUsage();
+        if      (arg == "-r" && i + 1 < argc) sampleRate = std::stod(argv[++i]);
+        else if (arg == "-b" && i + 1 < argc) blockSize  = std::stoi(argv[++i]);
+        else if (arg == "-h") {
+            std::cout << "LiveBPM CLI\nUsage: livebpm_cli [-r samplerate] [-b blocksize]\n";
             return 0;
         }
     }
 
-    // --- Configure DSP engine ---
-    livebpm::Config config;
-    config.sampleRate = sampleRate;
-    config.blockSize  = blockSize;
-
-    livebpm::Engine engine(config);
+    // --- Configure engine with base settings ---
+    livebpm::Config base;
+    base.sampleRate = sampleRate;
+    base.blockSize  = blockSize;
+    livebpm::Engine engine(base);
     g_engine = &engine;
 
-    // --- List devices and ask user to pick one ---
+    // --- Device enumeration ---
     ma_context context;
     if (ma_context_init(nullptr, 0, nullptr, &context) != MA_SUCCESS) {
-        std::cerr << "Error: Could not initialize audio context.\n";
+        std::cerr << "Error: Could not initialise audio context.\n";
         return 1;
     }
 
-    ma_device_info* captureDevices;
-    ma_uint32        captureCount;
-    ma_device_info* playbackDevices;
-    ma_uint32        playbackCount;
-
-    if (ma_context_get_devices(&context,
-                                &playbackDevices, &playbackCount,
-                                &captureDevices,  &captureCount) != MA_SUCCESS) {
+    ma_device_info* captureDevices; ma_uint32 captureCount;
+    ma_device_info* playbackDevices; ma_uint32 playbackCount;
+    if (ma_context_get_devices(&context, &playbackDevices, &playbackCount,
+                               &captureDevices, &captureCount) != MA_SUCCESS) {
         std::cerr << "Error: Could not enumerate audio devices.\n";
         ma_context_uninit(&context);
         return 1;
     }
 
-    // Print available devices
-    std::cout << "=== LiveBPM CLI ===\n\n"
-              << "Available capture devices:\n";
+    std::cout << "=== LiveBPM CLI ===\n\nAvailable capture devices:\n";
     for (ma_uint32 i = 0; i < captureCount; ++i) {
         std::cout << "  [" << i << "] " << captureDevices[i].name;
-        if (captureDevices[i].isDefault)
-            std::cout << "  (default)";
+        if (captureDevices[i].isDefault) std::cout << "  (default)";
         std::cout << "\n";
     }
 
-    // Ask user to pick a device
     int deviceIndex = -1;
-    while (deviceIndex < 0 || deviceIndex >= static_cast<int>(captureCount)) {
+    while (true) {
         std::cout << "\nEnter device number (or press Enter for default): ";
         std::string input;
         std::getline(std::cin, input);
-
-        // If user just pressed Enter use the default
-        if (input.empty()) {
-            deviceIndex = -1;
-            break;
-        }
-
+        if (input.empty()) { deviceIndex = -1; break; }
         try {
             deviceIndex = std::stoi(input);
-            if (deviceIndex < 0 || deviceIndex >= static_cast<int>(captureCount)) {
-                std::cout << "Invalid choice. Please enter a number between 0 and "
-                          << captureCount - 1 << ".\n";
-                deviceIndex = -1;
-            }
-        } catch (...) {
-            std::cout << "Invalid input. Please enter a number.\n";
-            deviceIndex = -1;
-        }
+            if (deviceIndex >= 0 && deviceIndex < static_cast<int>(captureCount)) break;
+        } catch (...) {}
+        std::cout << "Invalid choice.\n";
+        deviceIndex = -1;
     }
 
-    // Store selected device ID
     ma_device_id* selectedDeviceId = nullptr;
     ma_device_id  chosenDeviceId;
-
     if (deviceIndex >= 0) {
         chosenDeviceId   = captureDevices[deviceIndex].id;
         selectedDeviceId = &chosenDeviceId;
@@ -195,10 +261,19 @@ int main(int argc, char* argv[])
     } else {
         std::cout << "\nUsing default device.\n";
     }
-
     ma_context_uninit(&context);
 
-    // --- Configure audio capture device ---
+    // --- Preset and resolution selection ---
+    int presetId = pickPreset();
+    g_presetId.store(presetId);
+    engine.updateTunableConfig(presetConfig(presetId));
+    std::cout << "Preset:     " << presetName(presetId) << "\n";
+
+    auto resolution = pickResolution();
+    engine.setTargetResolution(resolution);
+    std::cout << "Resolution: " << resolutionName(resolution) << "\n";
+
+    // --- Audio device setup ---
     ma_device_config deviceConfig = ma_device_config_init(ma_device_type_capture);
     deviceConfig.capture.format     = ma_format_f32;
     deviceConfig.capture.channels   = 1;
@@ -208,93 +283,54 @@ int main(int argc, char* argv[])
     deviceConfig.dataCallback       = audioCallback;
 
     ma_device device;
-    ma_result  result = ma_device_init(nullptr, &deviceConfig, &device);
-
-    if (result != MA_SUCCESS) {
-        std::cerr << "Error: Could not initialize audio device (" << result << ")\n"
-                  << "Check that you have a microphone connected and permissions granted.\n";
+    if (ma_device_init(nullptr, &deviceConfig, &device) != MA_SUCCESS) {
+        std::cerr << "Error: Could not initialise audio device.\n";
         return 1;
     }
 
-    // --- Print startup info ---
     std::cout << "\n=== Starting BPM Detection ===\n"
-              << "Active device: " << device.capture.name << "\n"
-              << "Sample rate:   " << device.sampleRate   << " Hz\n"
-              << "Block size:    " << blockSize            << "\n"
-              << "Press Ctrl+C to exit.\n\n";
+              << "Device:    " << device.capture.name << "\n"
+              << "Rate:      " << device.sampleRate << " Hz\n"
+              << "Preset:    " << presetName(presetId) << "\n"
+              << "Resolution:" << resolutionName(resolution) << "\n\n";
 
-    // --- Start capture ---
-    result = ma_device_start(&device);
-    if (result != MA_SUCCESS) {
+    if (ma_device_start(&device) != MA_SUCCESS) {
         std::cerr << "Error: Could not start audio capture.\n";
         ma_device_uninit(&device);
         return 1;
     }
 
     std::signal(SIGINT, signalHandler);
+    std::thread inputListener(inputThread, &engine);
 
-    double currentDisplayBpm = 0.0;
-    double lastPrintedBpm = 0.0;
-
-    const double ALPHA = 0.15;
-    const double CONF_THRESHOLD = 0.45;
-    double VISUAL_DEADZONE = engine.getVisualDeadzone();
-
-    // --- Main display loop (10 fps) ---
+    // --- Display loop (10 fps) ---
     while (running.load()) {
-        auto bpmResult = engine.getLatestResult();
+        auto r   = engine.getLatestResult();
+        auto res = choiceToResolution(g_resolutionChoice.load());
 
         std::cout << "\r";
-
-        if (bpmResult.hasValidEstimate) {
-            if (bpmResult.confidence >= CONF_THRESHOLD) {
-                if (currentDisplayBpm == 0.0) {
-                    currentDisplayBpm = bpmResult.bpm;
-                }
-                currentDisplayBpm = (ALPHA * bpmResult.bpm) + ((1.0 - ALPHA) * currentDisplayBpm);
-            }
-
-            double targetDisplayValue = currentDisplayBpm;
-
-            
-            // Magnetic Snapping
-            double nearestWhole = std::round(targetDisplayValue);
-            if (std::abs(targetDisplayValue - nearestWhole) < 0.15) {
-                targetDisplayValue = nearestWhole;
-            }
-            
-
-            if (lastPrintedBpm != 0.0) {
-                if (std::abs(targetDisplayValue - lastPrintedBpm) < VISUAL_DEADZONE) {
-                    targetDisplayValue = lastPrintedBpm; // Lock to the current display to stop jitter
-                } else {
-                    lastPrintedBpm = targetDisplayValue; // Value exceeded deadzone, update display
-                }
-            } else {
-                lastPrintedBpm = targetDisplayValue;
-            }
-
+        if (r.hasValidEstimate) {
             std::cout << "  BPM: "
-                      << std::fixed << std::setprecision(1) << std::setw(6)
-                      << targetDisplayValue
-                      << "  |  Confidence: "
-                      << std::setprecision(0) << std::setw(3)
-                      << (bpmResult.confidence * 100) << "%"
-                      << "  |  "
-                      << std::setprecision(2)
-                      << bpmResult.processingTimeMs << " ms";
+                      << std::fixed << std::setprecision(1) << std::setw(6) << r.bpm
+                      << "  |  Conf: "
+                      << std::setprecision(0) << std::setw(3) << (r.confidence * 100) << "%"
+                      << "  |  " << std::setprecision(2) << r.processingTimeMs << " ms"
+                      << "  |  [" << g_resolutionChoice.load() << "] " << resolutionName(res)
+                      << "  |  " << presetName(g_presetId.load())
+                      << "          ";
         } else {
-            std::cout << "  Listening... (play a steady rhythm)      ";
+            std::cout << "  Listening...  "
+                      << "  [" << g_resolutionChoice.load() << "] " << resolutionName(res)
+                      << "  |  " << presetName(g_presetId.load())
+                      << "          ";
         }
-
         std::cout << std::flush;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    // --- Cleanup ---
     std::cout << "\n\nStopping...\n";
     ma_device_uninit(&device);
     g_engine = nullptr;
-
+    if (inputListener.joinable()) inputListener.detach();
     return 0;
 }

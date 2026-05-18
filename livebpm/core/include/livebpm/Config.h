@@ -32,6 +32,36 @@ namespace livebpm {
 
         // Target note resolution for tempo estimation (Default: Quarter Notes)
         NoteResolution targetResolution = NoteResolution::QuarterNote;
+
+        // ---------------------------------------------------------------
+        // Tunable DSP parameters (safe to change at runtime via updateTunableConfig)
+        // ---------------------------------------------------------------
+
+        // Onset detection stream blend: weight given to the semitone-flux stream.
+        // The complex-domain stream receives (1 - semitoneFluxWeight).
+        // Higher = more responsive to hard transients (percussion, picks).
+        // Lower  = more responsive to legato/phase onsets (breath, bowing).
+        float semitoneFluxWeight = 0.60f;
+
+        // Additive offset above the per-stream moving average used as the onset gate.
+        // Lower  = catches softer note attacks; Higher = ignores subtle transitions.
+        float gatingOffset = 0.015f;
+
+        // EMA alpha for the per-stream adaptive gating threshold.
+        // Higher = adapts faster to changing signal levels.
+        float gatingAlpha = 0.10f;
+
+        // EMA alpha for the final novelty smoothing pass.
+        // Higher = more responsive (less smoothed); Lower = smoother but slower.
+        float noveltySmoothing = 0.40f;
+
+        // log1p compression lambda applied to the fused novelty curve.
+        // Higher = more aggressive dynamic-range compression.
+        float fluxCompression = 50.0f;
+
+        // Blend weight for the stable-BPM exponential moving average.
+        // Lower = stickier (resists tempo changes); Higher = follows new tempo faster.
+        float hysteresisBlend = 0.05f;
     };
 
 } // namespace livebpm

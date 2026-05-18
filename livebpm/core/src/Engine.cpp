@@ -70,9 +70,6 @@ namespace livebpm {
 
 struct Engine::Impl {
     // Magic numbers
-    static constexpr float GATING_OFFSET = 0.015f;
-    static constexpr float GATING_ALPHA = 0.1f;
-    static constexpr float FLUX_COMPRESSION_LAMBDA = 50.0f;
     static constexpr double FAST_TEMPO_THRESHOLD = 140.0;
     static constexpr double SILENCE_TIMEOUT_SEC = 2.0;
     static constexpr int WARMUP_HOPS = 50;
@@ -251,19 +248,19 @@ struct Engine::Impl {
         );
 
         // ---- Adaptive gating - each stream against its own moving average ----
-        float semitoneThreshold = gating.semitoneFluxMovingAverage + GATING_OFFSET;
+        float semitoneThreshold = gating.semitoneFluxMovingAverage + config.gatingOffset;
         float gatedSemitone = (semitoneFlux > semitoneThreshold)
             ? (semitoneFlux - gating.semitoneFluxMovingAverage)
             : 0.0f;
         gating.semitoneFluxMovingAverage =
-            GATING_ALPHA * semitoneFlux + (1.0f - GATING_ALPHA) * gating.semitoneFluxMovingAverage;
+            config.gatingAlpha * semitoneFlux + (1.0f - config.gatingAlpha) * gating.semitoneFluxMovingAverage;
 
-        float complexThreshold = gating.complexFluxMovingAverage + GATING_OFFSET;
+        float complexThreshold = gating.complexFluxMovingAverage + config.gatingOffset;
         float gatedComplex = (complexFlux > complexThreshold)
             ? (complexFlux - gating.complexFluxMovingAverage)
             : 0.0f;
         gating.complexFluxMovingAverage =
-            GATING_ALPHA * complexFlux + (1.0f - GATING_ALPHA) * gating.complexFluxMovingAverage;
+            config.gatingAlpha * complexFlux + (1.0f - config.gatingAlpha) * gating.complexFluxMovingAverage;
 
         // ---- Normalise complex stream to comparable scale ----
         // Semitone flux is bounded [0, 1]; complex domain isn't. Dividing by
@@ -281,11 +278,12 @@ struct Engine::Impl {
         if (gating.hopsProcessed < WARMUP_HOPS) {
             combinedFlux = gatedSemitone;
         } else {
-            combinedFlux = 0.6f * gatedSemitone + 0.4f * normalisedComplex;
+            combinedFlux = config.semitoneFluxWeight * gatedSemitone
+                         + (1.0f - config.semitoneFluxWeight) * normalisedComplex;
         }
 
         // Logarithmic compression
-        return std::log1p(FLUX_COMPRESSION_LAMBDA * combinedFlux);
+        return std::log1p(config.fluxCompression * combinedFlux);
     }
 
     void updateSilenceAndGating(float rawNovelty) {
@@ -307,7 +305,8 @@ struct Engine::Impl {
         }
 
         // Apply a smoothing filter to round off jagged legato peaks
-        gating.noveltyMovingAverage = 0.6f * gating.noveltyMovingAverage + 0.4f * rawNovelty;
+        gating.noveltyMovingAverage = (1.0f - config.noveltySmoothing) * gating.noveltyMovingAverage
+                                    + config.noveltySmoothing * rawNovelty;
         float noveltyVal = gating.noveltyMovingAverage;
 
         // Store in novelty buffer
@@ -475,7 +474,8 @@ struct Engine::Impl {
                     tempo.currentStableBpm = currentBpm;
                 } else {
                     // Stiffen the glide so FFT window drift can't drag it down
-                    tempo.currentStableBpm = 0.95 * tempo.currentStableBpm + 0.05 * currentBpm;
+                    tempo.currentStableBpm = (1.0 - config.hysteresisBlend) * tempo.currentStableBpm
+                                           + config.hysteresisBlend * currentBpm;
                     // Assign the smoothed value back
                     currentBpm = tempo.currentStableBpm;
                 }
@@ -583,6 +583,27 @@ void Engine::setTargetResolution(NoteResolution resolution) {
 void Engine::reset() {
     pImpl_->flushTrackingState();
     latestResult_ = Result{};
+}
+
+void Engine::updateTunableConfig(const Config& newCfg) {
+    auto& c = pImpl_->config;
+    // Structural fields (sampleRate, blockSize, fftOrder, analysisWindowSeconds)
+    // are intentionally not copied — they affect buffer layout set at construction.
+    c.minBpm                   = newCfg.minBpm;
+    c.maxBpm                   = newCfg.maxBpm;
+    c.doubleTimeJumpThreshold  = newCfg.doubleTimeJumpThreshold;
+    c.halfTimeJumpThreshold    = newCfg.halfTimeJumpThreshold;
+    c.SILENCE_THRESHOLD        = newCfg.SILENCE_THRESHOLD;
+    c.VISUAL_DEADZONE          = newCfg.VISUAL_DEADZONE;
+    // targetResolution is intentionally excluded — use setTargetResolution() instead
+    // so that preset switches never silently override the user's chosen resolution.
+    c.semitoneFluxWeight       = newCfg.semitoneFluxWeight;
+    c.gatingOffset             = newCfg.gatingOffset;
+    c.gatingAlpha              = newCfg.gatingAlpha;
+    c.noveltySmoothing         = newCfg.noveltySmoothing;
+    c.fluxCompression          = newCfg.fluxCompression;
+    c.hysteresisBlend          = newCfg.hysteresisBlend;
+    reset();
 }
 
 } // namespace livebpm

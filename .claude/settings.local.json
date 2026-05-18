@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Joe Biden\\\\Desktop\\\\sem1\\\\Programming Project\\\\MSL-MEHEARSAL-LIVEBPM\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(grep -E \"\\\\.\\(js|wasm|html|css\\)$\")",
+      "Bash(grep -E \"\\\\.\\(d\\\\.ts|wasm\\\\.js|pre\\\\.js|post\\\\.js\\)$\")",
+      "Bash(mkdir -p \"/c/Users/Joe Biden/.claude/projects/c--Users-Joe-Biden-Desktop-sem1-Programming-Project-MSL-MEHEARSAL-LIVEBPM/memory\")",
+      "Bash(git -C \"/c/Users/Joe Biden/Desktop/sem1/Programming Project/MSL-MEHEARSAL-LIVEBPM\" diff --stat HEAD)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\Joe Biden\\.claude\\projects\\c--Users-Joe-Biden-Desktop-sem1-Programming-Project-MSL-MEHEARSAL-LIVEBPM\\memory"
+    ]
+  }
+}

@@ -6,250 +6,576 @@
     <title>LiveBPM - WebAssembly</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
             font-family: 'Segoe UI', system-ui, sans-serif;
-            display: flex; justify-content: center; align-items: center;
-            height: 100vh; background: #1a1a1a; color: #eee;
+            min-height: 100vh;
+            background: #1a1a1a;
+            color: #eee;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 2.5rem 1rem 3rem;
         }
-        .container { text-align: center; }
-        h1 { font-size: 1.8rem; margin-bottom: 2em; opacity: 0.7; }
+
+        .container {
+            width: 100%;
+            max-width: 620px;
+            text-align: center;
+        }
+
+        h1 { font-size: 1.6rem; margin-bottom: 1.8em; opacity: 0.6; letter-spacing: 0.08em; }
+
+        /* ── BPM display ─────────────────────────────────────────── */
         .bpm-display {
             font-size: 5rem; font-weight: 700; color: #00d4aa;
-            font-variant-numeric: tabular-nums; min-height: 120px;
+            font-variant-numeric: tabular-nums; min-height: 110px;
             display: flex; align-items: center; justify-content: center;
         }
-        .confidence { font-size: 1.2rem; margin-top: 1rem; opacity: 0.8; }
+
+        /* ── Confidence bar ──────────────────────────────────────── */
+        .confidence { font-size: 1rem; margin-top: 1rem; opacity: 0.75; }
         .confidence-bar {
-            width: 300px; height: 8px; background: #333; border-radius: 4px;
+            width: 300px; height: 6px; background: #2a2a2a; border-radius: 3px;
             margin: 0.5em auto; overflow: hidden;
         }
         .confidence-fill {
-            height: 100%; background: #00d4aa; border-radius: 4px;
+            height: 100%; background: #00d4aa; border-radius: 3px;
             transition: width 0.3s ease;
         }
-        button {
-            margin-top: 2rem; padding: 0.8rem 2rem; font-size: 1.1rem;
-            background: #00d4aa; color: #1a1a1a; border: none;
-            border-radius: 8px; cursor: pointer; font-weight: 600;
+
+        /* ── Generic section ─────────────────────────────────────── */
+        .section {
+            margin-top: 1.8rem;
+            text-align: left;
         }
-        button:hover { background: #00f0c0; }
-        button:disabled { opacity: 0.4; cursor: not-allowed; }
-        .status { margin-top: 1rem; font-size: 0.9rem; opacity: 0.5; }
-        .note-resolution {
-            margin-top: 1.5rem;
-            display: flex;
-            justify-content: center;
-            gap: 20px;
+        .section-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #555;
+            margin-bottom: 0.6rem;
         }
 
+        /* ── Note resolution ─────────────────────────────────────── */
+        .note-resolution {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
         .note-resolution label {
             display: flex;
             align-items: center;
             cursor: pointer;
-            font-size: 0.95rem;
-            opacity: 0.9;
+            font-size: 0.88rem;
+            opacity: 0.85;
             white-space: nowrap;
         }
-
         .note-resolution input[type="radio"] {
-            margin-right: 8px;
+            margin-right: 6px;
             cursor: pointer;
+            accent-color: #00d4aa;
         }
+
+        /* ── Preset buttons ──────────────────────────────────────── */
+        .preset-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .preset-btn {
+            padding: 0.38rem 0.9rem;
+            font-size: 0.82rem;
+            font-weight: 500;
+            background: #232323;
+            color: #777;
+            border: 1px solid #2e2e2e;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+            white-space: nowrap;
+        }
+        .preset-btn:hover:not(:disabled) {
+            background: #2c2c2c;
+            color: #bbb;
+            border-color: #3a3a3a;
+        }
+        .preset-btn.active {
+            background: #00d4aa;
+            color: #111;
+            border-color: #00d4aa;
+            font-weight: 700;
+        }
+        .preset-btn:disabled {
+            opacity: 0.28;
+            cursor: not-allowed;
+        }
+
+        /* ── Advanced parameters panel ───────────────────────────── */
+        .params-section {
+            margin-top: 1.8rem;
+            border: 1px solid #252525;
+            border-radius: 10px;
+            overflow: hidden;
+            text-align: left;
+        }
+        .params-section summary {
+            padding: 0.7rem 1rem;
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #555;
+            background: #1f1f1f;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            list-style: none;
+        }
+        .params-section summary::-webkit-details-marker { display: none; }
+        .params-section summary::after {
+            content: '▾';
+            font-size: 0.85rem;
+            transition: transform 0.2s ease;
+            opacity: 0.5;
+        }
+        .params-section[open] summary::after {
+            transform: rotate(-180deg);
+        }
+        .params-section summary:hover { color: #777; }
+
+        .params-grid {
+            padding: 1rem 1.1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
+            background: #1c1c1c;
+        }
+
+        .param-group-label {
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #3a3a3a;
+            margin-top: 0.4rem;
+        }
+        .param-group-label:first-child { margin-top: 0; }
+
+        .param-row {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+        .param-row label {
+            width: 190px;
+            flex-shrink: 0;
+            font-size: 0.8rem;
+            color: #888;
+            cursor: default;
+        }
+        .param-row label .tip {
+            display: block;
+            font-size: 0.68rem;
+            color: #444;
+            margin-top: 1px;
+            line-height: 1.3;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            flex: 1;
+            height: 3px;
+            background: #2e2e2e;
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+            min-width: 60px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 13px; height: 13px;
+            border-radius: 50%;
+            background: #00d4aa;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        input[type="range"]:hover::-webkit-slider-thumb { background: #00f0c0; }
+        input[type="range"]:disabled {
+            opacity: 0.2;
+            cursor: not-allowed;
+        }
+        input[type="range"]:disabled::-webkit-slider-thumb { cursor: not-allowed; }
+
+        .param-value {
+            width: 52px;
+            text-align: right;
+            font-size: 0.8rem;
+            color: #00d4aa;
+            font-variant-numeric: tabular-nums;
+            flex-shrink: 0;
+        }
+
+        /* ── Start button & status ───────────────────────────────── */
+        .controls {
+            margin-top: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.8rem;
+        }
+        button#startBtn {
+            padding: 0.75rem 2.2rem;
+            font-size: 1rem;
+            background: #00d4aa;
+            color: #111;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            transition: background 0.15s;
+        }
+        button#startBtn:hover { background: #00f0c0; }
+        button#startBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+        .status { font-size: 0.85rem; opacity: 0.4; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>LiveBPM</h1>
-        <div class="bpm-display" id="bpmDisplay">--</div>
-        
-        <div class="confidence">
-            Confidence
-            <div class="confidence-bar">
-                <div class="confidence-fill" id="confidenceFill" style="width: 0%"></div>
-            </div>
-        </div>
+<div class="container">
+    <h1>LiveBPM</h1>
 
-        <div class="note-resolution">
-            <label>
-                <input type="radio" name="resolution" value="6" onchange="updateNoteResolution(this.value)"> 
-                Smart
-            </label>
-            <label>
-                <input type="radio" name="resolution" value="1" onchange="updateNoteResolution(this.value)"> 
-                1/2 Note
-            </label>
-            <label>
-                <input type="radio" name="resolution" value="2" onchange="updateNoteResolution(this.value)" checked> 
-                1/4 Note
-            </label>
-            <label>
-                <input type="radio" name="resolution" value="3" onchange="updateNoteResolution(this.value)"> 
-                1/8 Note
-            </label>
-            <label>
-                <input type="radio" name="resolution" value="4" onchange="updateNoteResolution(this.value)"> 
-                1/8 Note Triplet
-            </label>
-            <label>
-                <input type="radio" name="resolution" value="5" onchange="updateNoteResolution(this.value)"> 
-                1/16 Note
-            </label>
+    <!-- BPM display -->
+    <div class="bpm-display" id="bpmDisplay">--</div>
+
+    <!-- Confidence -->
+    <div class="confidence">
+        Confidence
+        <div class="confidence-bar">
+            <div class="confidence-fill" id="confidenceFill" style="width: 0%"></div>
         </div>
-        
+    </div>
+
+    <!-- Note resolution -->
+    <div class="section">
+        <div class="section-label">Note Resolution</div>
+        <div class="note-resolution">
+            <label><input type="radio" name="resolution" value="6" onchange="updateNoteResolution(this.value)"> Smart</label>
+            <label><input type="radio" name="resolution" value="1" onchange="updateNoteResolution(this.value)"> ½ Note</label>
+            <label><input type="radio" name="resolution" value="2" onchange="updateNoteResolution(this.value)" checked> ¼ Note</label>
+            <label><input type="radio" name="resolution" value="3" onchange="updateNoteResolution(this.value)"> ⅛ Note</label>
+            <label><input type="radio" name="resolution" value="4" onchange="updateNoteResolution(this.value)"> ⅛ Triplet</label>
+            <label><input type="radio" name="resolution" value="5" onchange="updateNoteResolution(this.value)"> 1/16 Note</label>
+        </div>
+    </div>
+
+    <!-- Instrument presets -->
+    <div class="section">
+        <div class="section-label">Instrument Preset</div>
+        <div class="preset-buttons" id="presetButtons">
+            <button class="preset-btn active" data-preset="0" onclick="selectPreset(0)" disabled>Default</button>
+            <button class="preset-btn" data-preset="1" onclick="selectPreset(1)" disabled>Flute</button>
+            <button class="preset-btn" data-preset="2" onclick="selectPreset(2)" disabled>Guitar</button>
+            <button class="preset-btn" data-preset="3" onclick="selectPreset(3)" disabled>Saxophone</button>
+            <button class="preset-btn" data-preset="4" onclick="selectPreset(4)" disabled>Acoustic Bass</button>
+            <button class="preset-btn" data-preset="5" onclick="selectPreset(5)" disabled>Cajón Flamenco</button>
+        </div>
+    </div>
+
+    <!-- Advanced parameters -->
+    <details class="params-section" id="paramsSection">
+        <summary>Advanced Parameters</summary>
+        <div class="params-grid" id="paramsGrid">
+            <!-- Built dynamically by JS below -->
+        </div>
+    </details>
+
+    <!-- Start / status -->
+    <div class="controls">
         <button id="startBtn" onclick="startAudio()" disabled>Start</button>
         <div class="status" id="status">Loading WASM...</div>
     </div>
+</div>
 
-<script type="module">        
-        let audioContext = null;
-        let clearDisplayTimeout = null;
-        let audioWorkletNode = null;
+<script type="module">
+    // ─── Parameter descriptors ────────────────────────────────────────────────
+    // These mirror the Config fields exposed by getConfig() / setParam().
+    const PARAMS = [
+        {
+            group: 'Onset Detection',
+            items: [
+                {
+                    id: 'semitoneFluxWeight', label: 'Semitone Flux Weight',
+                    tip: 'High → percussion & picks.  Low → breath & bowing.',
+                    min: 0, max: 1, step: 0.01, decimals: 2,
+                },
+                {
+                    id: 'gatingOffset', label: 'Onset Gate Threshold',
+                    tip: 'How far above the moving average a peak must be to count as an onset.',
+                    min: 0.001, max: 0.05, step: 0.001, decimals: 3,
+                },
+                {
+                    id: 'gatingAlpha', label: 'Gate Adapt Rate',
+                    tip: 'How fast the gate threshold adapts to changing signal levels.',
+                    min: 0.01, max: 0.5, step: 0.01, decimals: 2,
+                },
+                {
+                    id: 'noveltySmoothing', label: 'Novelty Smoothing',
+                    tip: 'EMA alpha on the novelty curve.  Higher → more responsive, more noisy.',
+                    min: 0.05, max: 0.95, step: 0.01, decimals: 2,
+                },
+                {
+                    id: 'fluxCompression', label: 'Flux Compression (λ)',
+                    tip: 'log1p lambda for dynamic-range compression of the novelty curve.',
+                    min: 10, max: 150, step: 1, decimals: 0,
+                },
+            ],
+        },
+        {
+            group: 'Tempo Tracking',
+            items: [
+                {
+                    id: 'hysteresisBlend', label: 'Tempo Hysteresis',
+                    tip: 'EMA blend weight for the stable BPM.  Lower → stickier, resists changes.',
+                    min: 0.01, max: 0.3, step: 0.005, decimals: 3,
+                },
+                {
+                    id: 'minBpm', label: 'Min BPM',
+                    tip: 'Lower bound of the autocorrelation BPM search range.',
+                    min: 20, max: 100, step: 5, decimals: 0,
+                },
+                {
+                    id: 'maxBpm', label: 'Max BPM',
+                    tip: 'Upper bound of the autocorrelation BPM search range.',
+                    min: 120, max: 320, step: 10, decimals: 0,
+                },
+            ],
+        },
+        {
+            group: 'Signal Gating',
+            items: [
+                {
+                    id: 'silenceThreshold', label: 'Silence Gate',
+                    tip: 'RMS amplitude below which the window is treated as silence.',
+                    min: 0.005, max: 0.1, step: 0.005, decimals: 3,
+                },
+            ],
+        },
+    ];
 
-        
-        let currentDisplayBpm = 0.0;
-        const ALPHA = 0.15; // EMA smoothing factor (lower = smoother)
-        const CONF_THRESHOLD = 0.45; // Ignore incoming BPMs if confidence is below this
-        let VISUAL_DEADZONE = 0.2; // BPM changes smaller than this won't update the display to prevent jitter. Default value, will be overridden by worklet message
+    // ─── State ────────────────────────────────────────────────────────────────
+    let audioContext       = null;
+    let clearDisplayTimeout = null;
+    let audioWorkletNode   = null;
+    let activePresetId     = 0;
 
-        window.startAudio = async function() {
-            const btn = document.getElementById('startBtn');
-            const status = document.getElementById('status');
-            
-            try {
-                btn.disabled = true;
-                status.textContent = 'Requesting microphone access...';
+    let currentDisplayBpm = 0.0;
+    const ALPHA           = 0.15;
+    const CONF_THRESHOLD  = 0.45;
+    let VISUAL_DEADZONE   = 0.2;
 
-                // Create AudioContext
-                audioContext = new AudioContext({ sampleRate: 48000 });
-                
-                // Request microphone stream
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: { 
-                        echoCancellation: false, 
-                        noiseSuppression: false, 
-                        autoGainControl: false 
-                    }
-                });
+    // ─── Build parameter grid ─────────────────────────────────────────────────
+    function buildParamGrid() {
+        const grid = document.getElementById('paramsGrid');
+        for (const group of PARAMS) {
+            const groupLabel = document.createElement('div');
+            groupLabel.className = 'param-group-label';
+            groupLabel.textContent = group.group;
+            grid.appendChild(groupLabel);
 
-                // Fetch WASM binary on main thread
-                status.textContent = 'Downloading WASM binary...';
-                const wasmResponse = await fetch('livebpm_wasm.wasm');
-                const wasmBinary = await wasmResponse.arrayBuffer();
-
-                status.textContent = 'Loading WASM Module...';
-
-                // Load AudioWorklet
-                await audioContext.audioWorklet.addModule('processor.js');
-
-                // Create worklet node
-                audioWorkletNode = new AudioWorkletNode(audioContext, 'livebpm-processor');
-                
-                // Listen for results from worklet
-                audioWorkletNode.port.onmessage = (event) => {
-                    const { type, data, message } = event.data;
-                    if (type === 'ready') {
-                        status.textContent = 'Listening... play a rhythm!';
-                        btn.textContent = 'Listening...';
-                        VISUAL_DEADZONE = event.data.deadzone;
-                    } else if (type === 'result') {
-                        updateDisplay(data);
-                    } else if (type === 'error') {
-                        status.textContent = 'Error: ' + message;
-                    }
-                };
-
-                // Connect graph: Mic -> WorkletNode
-                const source = audioContext.createMediaStreamSource(stream);
-                source.connect(audioWorkletNode);
-
-                // Initialise WASM engine in worklet
-                audioWorkletNode.port.postMessage({ 
-                    type: 'init',
-                    sampleRate: audioContext.sampleRate,
-                    wasmBinary: wasmBinary
-                });
-
-            } catch (err) {
-                status.textContent = 'Error: ' + err.message;
-                btn.disabled = false;
-                btn.textContent = 'Retry';
+            for (const p of group.items) {
+                const row = document.createElement('div');
+                row.className = 'param-row';
+                row.innerHTML = `
+                    <label for="slider-${p.id}">
+                        ${p.label}
+                        <span class="tip">${p.tip}</span>
+                    </label>
+                    <input type="range" id="slider-${p.id}"
+                           min="${p.min}" max="${p.max}" step="${p.step}"
+                           disabled
+                           oninput="onParamChange('${p.id}', this.value)">
+                    <span class="param-value" id="val-${p.id}">--</span>
+                `;
+                grid.appendChild(row);
             }
-        };
+        }
+    }
 
-        window.updateNoteResolution = function(value) {
-            if (audioWorkletNode) {
-                audioWorkletNode.port.postMessage({
-                    type: 'setResolution',
-                    value: parseInt(value)
-                });
-                // Flush the UI state so it snaps to the new reading instantly
-                currentDisplayBpm = 0.0;
-                document.getElementById('bpmDisplay').textContent = '--';
-                document.getElementById('confidenceFill').style.width = '0%';
-            }
-        };
-
-        function updateDisplay(data) {
-            const bpmEl = document.getElementById('bpmDisplay');
-            const confEl = document.getElementById('confidenceFill');
-            
-            if (data.hasValidEstimate) {
-                if (clearDisplayTimeout) {
-                    clearTimeout(clearDisplayTimeout);
-                    clearDisplayTimeout = null;
-                }
-
-                // Confidence Gating. Only process the new BPM if the engine is confident
-                if (data.confidence >= CONF_THRESHOLD) {
-                    
-                    if (currentDisplayBpm === 0.0) {
-                        currentDisplayBpm = data.bpm;
-                    }
-
-                    // Exponential Moving Average (EMA)
-                    currentDisplayBpm = (ALPHA * data.bpm) + ((1.0 - ALPHA) * currentDisplayBpm);
-                }
-
-                // Floating-Point Deadzones
-                let targetDisplayValue = currentDisplayBpm;
-
-                
-                // Magnetic Snapping
-                let nearestWhole = Math.round(targetDisplayValue);
-                if (Math.abs(targetDisplayValue - nearestWhole) < 0.15) {
-                    targetDisplayValue = nearestWhole;
-                }
-                
-
-                let currentlyDisplayed = parseFloat(bpmEl.textContent);
-
-                // Apply deadzone
-                if (!isNaN(currentlyDisplayed)) {
-                    if (Math.abs(targetDisplayValue - currentlyDisplayed) < VISUAL_DEADZONE) {
-                        targetDisplayValue = currentlyDisplayed; 
-                    }
-                }
-
-                // Update DOM
-                bpmEl.textContent = targetDisplayValue.toFixed(1);
-                confEl.style.width = (data.confidence * 100) + '%';
-
-            } else {
-                // INVALID READING
-                // Start a 2-second countdown to clear the display if there are no valid estimates
-                if (!clearDisplayTimeout) {
-                    clearDisplayTimeout = setTimeout(() => {
-                        currentDisplayBpm = 0.0; // Reset the EMA tracker
-                        bpmEl.textContent = '--';
-                        confEl.style.width = '0%';
-                    }, 2000);
+    // Sync all slider positions and value labels from a config object
+    function updateSliders(config) {
+        for (const group of PARAMS) {
+            for (const p of group.items) {
+                const slider = document.getElementById(`slider-${p.id}`);
+                const valEl  = document.getElementById(`val-${p.id}`);
+                const v = config[p.id];
+                if (slider && v !== undefined) {
+                    slider.value = v;
+                    valEl.textContent = parseFloat(v).toFixed(p.decimals);
                 }
             }
         }
+    }
 
-        // Enable the button once the script is loaded
-        document.getElementById('status').textContent = 'Ready. Press Start.';
-        document.getElementById('startBtn').disabled = false;
-    </script>
+    function enableControls() {
+        document.querySelectorAll('.preset-btn').forEach(b => b.disabled = false);
+        document.querySelectorAll('input[type="range"]').forEach(s => s.disabled = false);
+    }
+
+    // ─── Exposed to HTML event handlers ──────────────────────────────────────
+    window.selectPreset = function(id) {
+        activePresetId = id;
+        document.querySelectorAll('.preset-btn').forEach(b => {
+            b.classList.toggle('active', parseInt(b.dataset.preset) === id);
+        });
+        if (audioWorkletNode) {
+            audioWorkletNode.port.postMessage({ type: 'setPreset', id });
+            // UI sliders will be updated when configUpdate comes back from worklet
+        }
+        // Reset display so the new preset isn't compared against old EMA
+        currentDisplayBpm = 0.0;
+        document.getElementById('bpmDisplay').textContent = '--';
+        document.getElementById('confidenceFill').style.width = '0%';
+    };
+
+    window.onParamChange = function(name, rawValue) {
+        const value  = parseFloat(rawValue);
+        const allParams = PARAMS.flatMap(g => g.items);
+        const p = allParams.find(x => x.id === name);
+        if (p) document.getElementById(`val-${name}`).textContent = value.toFixed(p.decimals);
+
+        // Mark as custom (no active preset)
+        activePresetId = -1;
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+
+        if (audioWorkletNode) {
+            audioWorkletNode.port.postMessage({ type: 'setParam', name, value });
+        }
+    };
+
+    window.updateNoteResolution = function(value) {
+        if (audioWorkletNode) {
+            audioWorkletNode.port.postMessage({ type: 'setResolution', value: parseInt(value) });
+            currentDisplayBpm = 0.0;
+            document.getElementById('bpmDisplay').textContent = '--';
+            document.getElementById('confidenceFill').style.width = '0%';
+        }
+    };
+
+    // ─── Audio start ──────────────────────────────────────────────────────────
+    window.startAudio = async function() {
+        const btn    = document.getElementById('startBtn');
+        const status = document.getElementById('status');
+
+        try {
+            btn.disabled = true;
+            status.textContent = 'Requesting microphone access...';
+
+            audioContext = new AudioContext({ sampleRate: 48000 });
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation:  false,
+                    noiseSuppression:  false,
+                    autoGainControl:   false,
+                }
+            });
+
+            status.textContent = 'Downloading WASM binary...';
+            const wasmResponse = await fetch('livebpm_wasm.wasm');
+            const wasmBinary   = await wasmResponse.arrayBuffer();
+
+            status.textContent = 'Loading WASM module...';
+            await audioContext.audioWorklet.addModule('processor.js');
+
+            audioWorkletNode = new AudioWorkletNode(audioContext, 'livebpm-processor');
+
+            audioWorkletNode.port.onmessage = (event) => {
+                const { type, data, message } = event.data;
+
+                if (type === 'ready') {
+                    VISUAL_DEADZONE = event.data.deadzone;
+                    status.textContent = 'Listening… play a rhythm!';
+                    btn.textContent = 'Listening...';
+                    enableControls();
+
+                } else if (type === 'result') {
+                    updateDisplay(data);
+
+                } else if (type === 'configUpdate') {
+                    // Sync sliders to the engine's actual config (after preset or init)
+                    updateSliders(data);
+
+                } else if (type === 'error') {
+                    status.textContent = 'Error: ' + message;
+                }
+            };
+
+            const source = audioContext.createMediaStreamSource(stream);
+            source.connect(audioWorkletNode);
+
+            audioWorkletNode.port.postMessage({
+                type: 'init',
+                sampleRate: audioContext.sampleRate,
+                wasmBinary,
+            });
+
+        } catch (err) {
+            status.textContent = 'Error: ' + err.message;
+            btn.disabled = false;
+            btn.textContent = 'Retry';
+        }
+    };
+
+    // ─── Display update ───────────────────────────────────────────────────────
+    function updateDisplay(data) {
+        const bpmEl  = document.getElementById('bpmDisplay');
+        const confEl = document.getElementById('confidenceFill');
+
+        if (data.hasValidEstimate) {
+            if (clearDisplayTimeout) {
+                clearTimeout(clearDisplayTimeout);
+                clearDisplayTimeout = null;
+            }
+
+            if (data.confidence >= CONF_THRESHOLD) {
+                if (currentDisplayBpm === 0.0) currentDisplayBpm = data.bpm;
+                currentDisplayBpm = ALPHA * data.bpm + (1.0 - ALPHA) * currentDisplayBpm;
+            }
+
+            let target = currentDisplayBpm;
+
+            // Magnetic snapping to nearest integer
+            const nearest = Math.round(target);
+            if (Math.abs(target - nearest) < 0.15) target = nearest;
+
+            // Visual deadzone
+            const displayed = parseFloat(bpmEl.textContent);
+            if (!isNaN(displayed) && Math.abs(target - displayed) < VISUAL_DEADZONE) {
+                target = displayed;
+            }
+
+            bpmEl.textContent = target.toFixed(1);
+            confEl.style.width = (data.confidence * 100) + '%';
+
+        } else {
+            if (!clearDisplayTimeout) {
+                clearDisplayTimeout = setTimeout(() => {
+                    currentDisplayBpm = 0.0;
+                    bpmEl.textContent = '--';
+                    confEl.style.width = '0%';
+                }, 2000);
+            }
+        }
+    }
+
+    // ─── Init ─────────────────────────────────────────────────────────────────
+    buildParamGrid();
+    document.getElementById('status').textContent = 'Ready. Press Start.';
+    document.getElementById('startBtn').disabled = false;
+</script>
 </body>
 </html>
