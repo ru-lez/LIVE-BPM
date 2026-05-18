@@ -27,11 +27,15 @@
  *   (e.g. 16th notes vs half notes)
  *
  * - Stablising Readings (Post-Processing & Hysteresis)
- *   Heuristics are applied as raw tempo maths can be jumpy. The engine looks for strumming or
- *   tapping patterns by analysing amplitude peaks, which helps prevent accidental double-time
- *   BPM readings. A Hysteresis lock is also implemented where if the audio signal is muddy or
- *   ambiguous, the engine holds onto the last stable BPM instead of jumping to half-time or
- *   double-time.
+ *   Instead of relying purely on the raw tempo estimate, the engine implements heuristics
+ *   and hysteresis to prevent erratic jumps, especially in challenging scenarios like
+ *   fast tempos or weak signals.
+ *     1. Heuristics: The engine looks for strumming or tapping patterns by analysing
+ *        amplitude peaks. It compares even/odd peak ratios to make educated guesses to
+ *        prevent accidental double-time BPM readings.
+ *     2. Hysteresis Lock: Implemented where the system resists sudden BPM changes based
+ *        on its history. If the audio signal is muddy or ambiguous, the engine holds onto
+ *        the last stable BPM instead of jumping to half-time or double-time.
  * 
  * - UI Smoothing (WASM & CLI Integration)
  *   Due to the core engine designed to output raw precision, the CLI and WASM front-ends
@@ -43,6 +47,7 @@
  *   Ensuring these smoothing layers are implemented at the front-end layer allows the 
  *   core engine to remain 100% analytical and precise, while the user interfaces 
  *   (CLI and WASM) can focus on readability and usability.
+ * 
  */
 
  
