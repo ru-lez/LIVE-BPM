@@ -51,7 +51,7 @@
             white-space: nowrap;
         }
 
-        .note-resolution input[type="radio"] {
+        .note-resolution input[type="radio"], .note-resolution input[type="checkbox"] {
             margin-right: 8px;
             cursor: pointer;
         }
@@ -93,6 +93,12 @@
             <label>
                 <input type="radio" name="resolution" value="5" onchange="updateNoteResolution(this.value)"> 
                 1/16 Note
+            </label>
+        </div>
+        <div class="note-resolution">
+            <label>
+                <input type="checkbox" name="heuristicsCheckbox" checked onchange="toggleHeuristics(this.checked)"> 
+                Tempo Smoothing
             </label>
         </div>
         
@@ -182,12 +188,27 @@
                     type: 'setResolution',
                     value: parseInt(value)
                 });
-                // Flush the UI state so it snaps to the new reading instantly
-                currentDisplayBpm = 0.0;
-                document.getElementById('bpmDisplay').textContent = '--';
-                document.getElementById('confidenceFill').style.width = '0%';
+                // Flush the UI state
+                flushUIState();
             }
         };
+
+        window.toggleHeuristics = function(setting) {
+            if (audioWorkletNode) {
+                audioWorkletNode.port.postMessage({
+                    type: 'setHeuristics',
+                    enabled: setting
+                });
+                // Flush the UI state
+                flushUIState();
+            }
+        };
+
+        function flushUIState() {
+            currentDisplayBpm = 0.0;
+            document.getElementById('bpmDisplay').textContent = '--';
+            document.getElementById('confidenceFill').style.width = '0%';
+        }
 
         function updateDisplay(data) {
             const bpmEl = document.getElementById('bpmDisplay');

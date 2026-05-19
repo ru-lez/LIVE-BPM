@@ -16,6 +16,7 @@ public:
     void reset();
 
     void setTargetResolution(NoteResolution resolution);
+    void setHeuristicsEnabled(bool setting);
 
     double getVisualDeadzone() const;
 

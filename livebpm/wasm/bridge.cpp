@@ -57,6 +57,10 @@ public:
         engine_->reset();
     }
 
+    void setUseHeuristics(bool setting) {
+        engine_->setHeuristicsEnabled(setting);
+    }
+
 private:
     std::unique_ptr<livebpm::Engine> engine_;
 };
@@ -80,5 +84,6 @@ EMSCRIPTEN_BINDINGS(livebpm) {
         .function("getResult", &LiveBpmWasm::getResult)
         .function("setTargetResolution", &LiveBpmWasm::setTargetResolution)
         .function("getVisualDeadzone", &LiveBpmWasm::getVisualDeadzone)
-        .function("reset", &LiveBpmWasm::reset);
+        .function("reset", &LiveBpmWasm::reset)
+        .function("setUseHeuristics", &LiveBpmWasm::setUseHeuristics);
 }

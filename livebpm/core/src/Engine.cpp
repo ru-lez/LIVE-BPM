@@ -521,6 +521,7 @@ void Engine::processBlock(const float* samples, int numSamples) {
         double rawBpm = d.estimateRawTempo(inputScale, useSmartMixedMode, latestResult_.confidence);
 
         if (rawBpm > 0) {
+            double outputBpm = rawBpm;
         /* DEBUG LOGGING
             std::cout << "[DSP] Raw Detected: " << rawBpm 
                       << " | Stable: " << d.tempo.currentStableBpm 
@@ -530,14 +531,16 @@ void Engine::processBlock(const float* samples, int numSamples) {
             // Immediately scale the detected pulse back to Master 1/4 Note Tempo
             rawBpm /= inputScale;
 
-            d.applyAlternationHeuristics(rawBpm);
-            d.applyHysteresisAndCommit(rawBpm);
+            if (d.config.useHeuristics) {
+                d.applyAlternationHeuristics(rawBpm);
+                d.applyHysteresisAndCommit(rawBpm);
 
-            double outputBpm = rawBpm;
-            bool alreadyLockedFast = (d.tempo.currentStableBpm > d.Impl::FAST_TEMPO_THRESHOLD);
-            
-            if (!alreadyLockedFast && rawBpm > d.Impl::FAST_TEMPO_THRESHOLD && d.tempo.highBpmConfirmationCount < 12) {
-                outputBpm *= 0.5;
+                outputBpm = rawBpm;
+                bool alreadyLockedFast = (d.tempo.currentStableBpm > d.Impl::FAST_TEMPO_THRESHOLD);
+                
+                if (!alreadyLockedFast && rawBpm > d.Impl::FAST_TEMPO_THRESHOLD && d.tempo.highBpmConfirmationCount < 12) {
+                    outputBpm *= 0.5;
+                }
             }
 
             // Set the beat tracker lag using the resolution BPM
@@ -578,6 +581,12 @@ void Engine::setTargetResolution(NoteResolution resolution) {
         
         reset(); // Flush the engine state to prevent weirdness when switching resolutions
     }
+}
+
+void Engine::setHeuristicsEnabled(bool setting) {
+    pImpl_->config.useHeuristics = setting;
+
+    reset(); // Flush the engine state to prevent weirdness when switching heuristics on/off
 }
 
 void Engine::reset() {

@@ -37,6 +37,10 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
                     
                     this.engine.setTargetResolution(resEnum);
                 }
+            } else if (event.data.type === 'setHeuristics') {
+                if (this.engine) {
+                    this.engine.setUseHeuristics(event.data.enabled);
+                }
             }
         };
     }

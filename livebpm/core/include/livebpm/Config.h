@@ -30,6 +30,9 @@ namespace livebpm {
         // Visual Deadzone for display smoothing (Default: 0.1 BPM For Accuracy, increase to ~0.2 BPM to prevent jitter)
         double VISUAL_DEADZONE = 0.1;
 
+        // Whether to apply heuristics for fast tempo detection and octave error correction
+        bool useHeuristics = true; 
+
         // Target note resolution for tempo estimation (Default: Quarter Notes)
         NoteResolution targetResolution = NoteResolution::QuarterNote;
     };
