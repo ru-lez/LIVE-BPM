@@ -97,6 +97,22 @@
             accent-color: #00d4aa; 
             cursor: pointer; 
         }
+        .param-section {
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #333;
+        }
+        .param-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        .param-section h3 {
+            font-size: 1rem;
+            color: #eee;
+            margin-bottom: 15px;
+            opacity: 0.9;
+        }
         .menu-controls {
             grid-column: 1 / -1;
             display: flex;
@@ -194,10 +210,15 @@
         
         <div class="advanced-menu" id="advMenu">
             <div class="menu-controls">
-                <select class="preset-select" id="presetSelect" onchange="loadPreset(this.value)">
+                <select class="preset-select" id="presetSelect" onchange="loadPreset(this.value)" disabled>
                     <option value="default">Default / General Purpose</option>
-                    <option value="flute">Legato (Flute, Saxo)</option>
-                    <option value="cajon">Percussive (Cajón, Guitar)</option>
+                    <option value="cajon">Cajón Flamenco (Percussive)</option>
+                    <option value="flute">Flute (Legato)</option>
+                    <option value="guitar">Guitar, Acoustic</option>
+                    <option value="electricguitar">Guitar, Electric</option>
+                    <option value="acousticbass">Bass, Acoustic</option>
+                    <option value="electricbass">Bass, Electric</option>
+                    <option value="saxophone">Saxophone (Alto / Tenor)</option>
                     <option value="liveband">Full Band / Live Mix</option>
                     <option value="slowacoustic">Ambient / Slow Acoustic</option>
                 </select>
@@ -208,48 +229,83 @@
                 </div>
             </div>
 
-            <div class="param-grid">
-                <div class="param-group">
-                    <label class="checkbox-label">
-                        Tempo Smoothing (Heuristics)
-                        <input type="checkbox" id="heuristicsToggle" checked onchange="toggleHeuristics(this.checked)">
-                    </label>
+            <div class="param-section">
+                <h3>Onset Detection & Gating</h3>
+                <div class="param-grid">
+                    <div class="param-group">
+                        <label>Noise Gate (Silence) <span id="silenceThresholdVal">0.030</span></label>
+                        <input type="range" id="silenceThreshold" min="0.0" max="0.1" step="0.005" value="0.03" oninput="updateParam('silenceThreshold', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label>Complex Domain Weight <span id="complexDomainWeightVal">0.400</span></label>
+                        <input type="range" id="complexDomainWeight" min="0.0" max="1.0" step="0.05" value="0.4" oninput="updateParam('complexDomainWeight', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label>Onset Sensitivity <span id="onsetSensitivityVal">0.015</span></label>
+                        <input type="range" id="onsetSensitivity" min="0.001" max="0.1" step="0.001" value="0.015" oninput="updateParam('onsetSensitivity', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label>Gating Alpha (Adaptation) <span id="gatingAlphaVal">0.100</span></label>
+                        <input type="range" id="gatingAlpha" min="0.01" max="0.5" step="0.01" value="0.1" oninput="updateParam('gatingAlpha', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label>Flux Compression (Log1p) <span id="fluxCompressionVal">50.0</span></label>
+                        <input type="range" id="fluxCompression" min="10.0" max="100.0" step="1.0" value="50.0" oninput="updateParam('fluxCompression', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label>Novelty Smoothing <span id="noveltySmoothingVal">0.400</span></label>
+                        <input type="range" id="noveltySmoothing" min="0.05" max="0.9" step="0.05" value="0.4" oninput="updateParam('noveltySmoothing', this.value)">
+                    </div>
                 </div>
-                <div class="param-group">
-                    <label>Noise Gate (Silence Threshold) <span id="silenceThresholdVal">0.030</span></label>
-                    <input type="range" id="silenceThreshold" min="0.0" max="0.1" step="0.005" value="0.03" oninput="updateParam('silenceThreshold', this.value)">
+            </div>
+
+            <div class="param-section">
+                <h3>Tempo Engine & Hysteresis</h3>
+                <div class="param-grid">
+                    <div class="param-group">
+                        <label>Target Minimum BPM <span id="minBpmVal">40.0</span></label>
+                        <input type="range" id="minBpm" min="30.0" max="120.0" step="1.0" value="40.0" oninput="updateParam('minBpm', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label>Target Maximum BPM <span id="maxBpmVal">240.0</span></label>
+                        <input type="range" id="maxBpm" min="120.0" max="480.0" step="1.0" value="240.0" oninput="updateParam('maxBpm', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label class="checkbox-label">
+                            Heuristics (Octave/Pattern correction)
+                            <input type="checkbox" id="heuristicsToggle" checked onchange="toggleHeuristics(this.checked)">
+                        </label>
+                    </div>
+                    <div class="param-group">
+                        <label>Hysteresis Blend (Stickiness) <span id="hysteresisBlendVal">0.050</span></label>
+                        <input type="range" id="hysteresisBlend" min="0.01" max="0.2" step="0.01" value="0.05" oninput="updateParam('hysteresisBlend', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label>Double-Time Jump Tolerance <span id="doubleTimeJumpThresholdVal">20.0</span></label>
+                        <input type="range" id="doubleTimeJumpThreshold" min="5.0" max="40.0" step="5.0" value="20.0" oninput="updateParam('doubleTimeJumpThreshold', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label>Half-Time Jump Tolerance <span id="halfTimeJumpThresholdVal">10.0</span></label>
+                        <input type="range" id="halfTimeJumpThreshold" min="5.0" max="30.0" step="5.0" value="10.0" oninput="updateParam('halfTimeJumpThreshold', this.value)">
+                    </div>
                 </div>
-                <div class="param-group">
-                    <label>Onset Sensitivity <span id="onsetSensitivityVal">0.015</span></label>
-                    <input type="range" id="onsetSensitivity" min="0.001" max="0.1" step="0.001" value="0.015" oninput="updateParam('onsetSensitivity', this.value)">
-                </div>
-                <div class="param-group">
-                    <label>Complex Domain Weight <span id="complexDomainWeightVal">0.40</span></label>
-                    <input type="range" id="complexDomainWeight" min="0.0" max="1.0" step="0.05" value="0.4" oninput="updateParam('complexDomainWeight', this.value)">
-                </div>
-                <div class="param-group">
-                    <label>UI Smoothing (Alpha) <span id="uiSmoothingVal">0.15</span></label>
-                    <input type="range" id="uiSmoothing" min="0.01" max="0.5" step="0.01" value="0.15" oninput="updateParam('uiSmoothing', this.value)">
-                </div>
-                <div class="param-group">
-                    <label>Visual Deadzone (BPM Drift) <span id="visualDeadzoneVal">0.20</span></label>
-                    <input type="range" id="visualDeadzone" min="0.0" max="5.0" step="0.1" value="0.2" oninput="updateParam('visualDeadzone', this.value)">
-                </div>
-                <div class="param-group">
-                    <label>Target Minimum BPM <span id="minBpmVal">40.0</span></label>
-                    <input type="range" id="minBpm" min="30.0" max="120.0" step="1.0" value="40.0" oninput="updateParam('minBpm', this.value)">
-                </div>
-                <div class="param-group">
-                    <label>Target Maximum BPM <span id="maxBpmVal">240.0</span></label>
-                    <input type="range" id="maxBpm" min="120.0" max="480.0" step="1.0" value="240.0" oninput="updateParam('maxBpm', this.value)">
-                </div>
-                <div class="param-group">
-                    <label>Double-Time Jump Hysteresis <span id="doubleTimeJumpThresholdVal">20.0</span></label>
-                    <input type="range" id="doubleTimeJumpThreshold" min="5.0" max="40.0" step="5.0" value="20.0" oninput="updateParam('doubleTimeJumpThreshold', this.value)">
-                </div>
-                <div class="param-group">
-                    <label>Half-Time Jump Hysteresis <span id="halfTimeJumpThresholdVal">10.0</span></label>
-                    <input type="range" id="halfTimeJumpThreshold" min="5.0" max="30.0" step="5.0" value="10.0" oninput="updateParam('halfTimeJumpThreshold', this.value)">
+            </div>
+
+            <div class="param-section">
+                <h3>Display Output</h3>
+                <div class="param-grid">
+                    <div class="param-group">
+                        <label>UI Smoothing (Alpha) <span id="uiSmoothingVal">0.150</span></label>
+                        <input type="range" id="uiSmoothing" min="0.01" max="0.5" step="0.01" value="0.15" oninput="updateParam('uiSmoothing', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label>Visual Deadzone (Drift filter) <span id="visualDeadzoneVal">0.20</span></label>
+                        <input type="range" id="visualDeadzone" min="0.0" max="5.0" step="0.1" value="0.2" oninput="updateParam('visualDeadzone', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label>Magnetic Snap Range <span id="magneticSnapRangeVal">0.15</span></label>
+                        <input type="range" id="magneticSnapRange" min="0.0" max="0.5" step="0.05" value="0.15" oninput="updateParam('magneticSnapRange', this.value)">
+                    </div>
                 </div>
             </div>
         </div>
@@ -268,6 +324,7 @@
         let ALPHA = 0.15; // EMA smoothing factor (lower = smoother)
         const CONF_THRESHOLD = 0.45; // Ignore incoming BPMs if confidence is below this
         let VISUAL_DEADZONE = 0.2; // BPM changes smaller than this won't update the display to prevent jitter. Default value, will be overridden by worklet message
+        let MAGNETIC_SNAP_RANGE = 0.15;
 
         window.startAudio = async function() {
             const btn = document.getElementById('startBtn');
@@ -309,11 +366,56 @@
                         status.textContent = 'Listening... play a rhythm!';
                         btn.textContent = 'Listening...';
 
+                        document.getElementById('presetSelect').disabled = false;
                         syncParametersToEngine();
                     } else if (type === 'result') {
                         updateDisplay(data);
                     } else if (type === 'error') {
                         status.textContent = 'Error: ' + message;
+                    } else if (type === 'presetLoaded') {
+                        const config = data;
+                        
+                        // Update JS local state
+                        ALPHA = config.uiSmoothing;
+                        VISUAL_DEADZONE = config.visualDeadzone;
+                        MAGNETIC_SNAP_RANGE = config.magneticSnapRange;
+                        
+                        // Update Checkbox
+                        document.getElementById('heuristicsToggle').checked = config.heuristics;
+                        
+                        // Helper to update sliders and labels without re-triggering WASM updates
+                        const setSlider = (id, val, isInt) => {
+                            const el = document.getElementById(id);
+                            const textEl = document.getElementById(id + 'Val');
+                            if (el && textEl) {
+                                el.value = val;
+                                textEl.textContent = isInt ? val.toFixed(1) : val.toFixed(3);
+                            }
+                        };
+
+                        setSlider('silenceThreshold', config.silenceThreshold, false);
+                        setSlider('onsetSensitivity', config.onsetSensitivity, false);
+                        setSlider('complexDomainWeight', config.complexDomainWeight, false);
+                        setSlider('gatingAlpha', config.gatingAlpha, false);
+                        setSlider('noveltySmoothing', config.noveltySmoothing, false);
+                        setSlider('fluxCompression', config.fluxCompression, true);
+                        setSlider('hysteresisBlend', config.hysteresisBlend, false);
+                        setSlider('uiSmoothing', config.uiSmoothing, false);
+                        
+                        const vdEl = document.getElementById('visualDeadzone');
+                        if (vdEl) vdEl.value = config.visualDeadzone;
+                        document.getElementById('visualDeadzoneVal').textContent = config.visualDeadzone.toFixed(2);
+
+                        const magEl = document.getElementById('magneticSnapRange');
+                        if (magEl) magEl.value = config.magneticSnapRange;
+                        document.getElementById('magneticSnapRangeVal').textContent = config.magneticSnapRange.toFixed(2);
+
+                        setSlider('minBpm', config.minBpm, true);
+                        setSlider('maxBpm', config.maxBpm, true);
+                        setSlider('doubleTimeJumpThreshold', config.doubleTimeJumpThreshold, true);
+                        setSlider('halfTimeJumpThreshold', config.halfTimeJumpThreshold, true);
+
+                        flushUIState();
                     }
                 };
 
@@ -361,7 +463,7 @@
             value = parseFloat(value);
 
             // Format whole numbers for BPM limits and thresholds
-            if (['minBpm', 'maxBpm', 'doubleTimeJumpThreshold', 'halfTimeJumpThreshold'].includes(param)) {
+            if (['minBpm', 'maxBpm', 'doubleTimeJumpThreshold', 'halfTimeJumpThreshold', 'fluxCompression'].includes(param)) {
                 document.getElementById(param + 'Val').textContent = value.toFixed(1);
             } else if (param === 'visualDeadzone') {
                 document.getElementById(param + 'Val').textContent = value.toFixed(2);
@@ -376,6 +478,11 @@
             
             if (param === 'visualDeadzone') {
                 VISUAL_DEADZONE = value; // Update JS-side parameter directly
+                return;
+            }
+
+            if (param === 'magneticSnapRange') {
+                MAGNETIC_SNAP_RANGE = value; // Update JS-side parameter directly
                 return;
             }
             
@@ -401,8 +508,10 @@
             // Sync all range sliders
             const params = [
                 'silenceThreshold', 'onsetSensitivity', 'complexDomainWeight', 
+                'gatingAlpha', 'noveltySmoothing', 'fluxCompression', 'hysteresisBlend',
                 'uiSmoothing', 'minBpm', 'maxBpm', 
-                'doubleTimeJumpThreshold', 'halfTimeJumpThreshold', 'visualDeadzone'
+                'doubleTimeJumpThreshold', 'halfTimeJumpThreshold', 'visualDeadzone',
+                'magneticSnapRange'
             ];
             
             params.forEach(param => {
@@ -414,64 +523,8 @@
         }
 
         window.loadPreset = function(preset) {
-            const settings = {
-                default: { 
-                    heuristics: true, silenceThreshold: 0.03, onsetSensitivity: 0.015, complexDomainWeight: 0.4, uiSmoothing: 0.15,
-                    visualDeadzone: 0.20, minBpm: 40.0, maxBpm: 240.0, doubleTimeJumpThreshold: 20.0, halfTimeJumpThreshold: 10.0
-                },
-                flute: { 
-                    heuristics: true, silenceThreshold: 0.02, onsetSensitivity: 0.015, complexDomainWeight: 0.6, uiSmoothing: 0.2,
-                    visualDeadzone: 0.25, minBpm: 40.0, maxBpm: 200.0, doubleTimeJumpThreshold: 25.0, halfTimeJumpThreshold: 15.0
-                },
-                cajon: { 
-                    heuristics: true, silenceThreshold: 0.06, onsetSensitivity: 0.06, complexDomainWeight: 0.0, uiSmoothing: 0.3,
-                    visualDeadzone: 0.10, minBpm: 60.0, maxBpm: 240.0, doubleTimeJumpThreshold: 30.0, halfTimeJumpThreshold: 15.0
-                },
-                liveband: { 
-                    heuristics: true, silenceThreshold: 0.04, onsetSensitivity: 0.03, complexDomainWeight: 0.5, uiSmoothing: 0.2,
-                    visualDeadzone: 0.20, minBpm: 50.0, maxBpm: 220.0, doubleTimeJumpThreshold: 20.0, halfTimeJumpThreshold: 10.0
-                },
-                slowacoustic: { 
-                    heuristics: false, silenceThreshold: 0.01, onsetSensitivity: 0.005, complexDomainWeight: 0.75, uiSmoothing: 0.05,
-                    visualDeadzone: 0.30, minBpm: 30.0, maxBpm: 120.0, doubleTimeJumpThreshold: 40.0, halfTimeJumpThreshold: 10.0
-                }
-            };
-
-            const config = settings[preset];
-            if (config) {
-                // Update Sliders
-                const heuristicsBox = document.getElementById('heuristicsToggle');
-                heuristicsBox.checked = config.heuristics;
-                window.toggleHeuristics(config.heuristics);
-
-                document.getElementById('silenceThreshold').value = config.silenceThreshold;
-                window.updateParam('silenceThreshold', config.silenceThreshold);
-                
-                document.getElementById('onsetSensitivity').value = config.onsetSensitivity;
-                window.updateParam('onsetSensitivity', config.onsetSensitivity);
-                
-                document.getElementById('complexDomainWeight').value = config.complexDomainWeight;
-                window.updateParam('complexDomainWeight', config.complexDomainWeight);
-                
-                document.getElementById('uiSmoothing').value = config.uiSmoothing;
-                window.updateParam('uiSmoothing', config.uiSmoothing);
-
-                document.getElementById('visualDeadzone').value = config.visualDeadzone;
-                window.updateParam('visualDeadzone', config.visualDeadzone);
-                
-                document.getElementById('minBpm').value = config.minBpm;
-                window.updateParam('minBpm', config.minBpm);
-
-                document.getElementById('maxBpm').value = config.maxBpm;
-                window.updateParam('maxBpm', config.maxBpm);
-
-                document.getElementById('doubleTimeJumpThreshold').value = config.doubleTimeJumpThreshold;
-                window.updateParam('doubleTimeJumpThreshold', config.doubleTimeJumpThreshold);
-
-                document.getElementById('halfTimeJumpThreshold').value = config.halfTimeJumpThreshold;
-                window.updateParam('halfTimeJumpThreshold', config.halfTimeJumpThreshold);
-                
-                flushUIState(); // Reset the tracking grid when changing profiles
+            if (audioWorkletNode) {
+                audioWorkletNode.port.postMessage({ type: 'loadPreset', preset: preset });
             }
         };
 
@@ -520,7 +573,7 @@
                 
                 // Magnetic Snapping
                 let nearestWhole = Math.round(targetDisplayValue);
-                if (Math.abs(targetDisplayValue - nearestWhole) < 0.15) {
+                if (Math.abs(targetDisplayValue - nearestWhole) < MAGNETIC_SNAP_RANGE) {
                     targetDisplayValue = nearestWhole;
                 }
                 

@@ -24,6 +24,11 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
             if (event.data.type === 'init') {
                 // Receive the binary from the main thread
                 await this.initWasm(event.data.sampleRate, event.data.wasmBinary);
+            } else if (event.data.type === 'loadPreset') {
+                if (this.engine) {
+                    const configValues = this.engine.loadPreset(event.data.preset);
+                    this.port.postMessage({ type: 'presetLoaded', data: configValues });
+                }
             } else if (event.data.type === 'setResolution') {
                 if (this.engine) {
                     // Map the integer from JS to the Embind Enum
@@ -42,30 +47,20 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
                     this.engine.setUseHeuristics(event.data.enabled);
                 }
             } else if (event.data.type === 'setParameter') {
+                const { param, value } = event.data;
                 if (this.engine) {
-                    switch(event.data.param) {
-                        case 'onsetSensitivity': 
-                            this.engine.setOnsetSensitivity(event.data.value); 
-                            break;
-                        case 'complexDomainWeight': 
-                            this.engine.setComplexDomainWeight(event.data.value); 
-                            break;
-                        case 'silenceThreshold': 
-                            this.engine.setSilenceThreshold(event.data.value); 
-                            break;
-                        case 'minBpm':
-                            this.engine.setMinBpm(event.data.value);
-                            break;
-                        case 'maxBpm':
-                            this.engine.setMaxBpm(event.data.value);
-                            break;
-                        case 'doubleTimeJumpThreshold':
-                            this.engine.setDoubleTimeJumpThreshold(event.data.value);
-                            break;
-                        case 'halfTimeJumpThreshold':
-                            this.engine.setHalfTimeJumpThreshold(event.data.value);
-                            break;
-                    }
+                    if (param === 'silenceThreshold') this.engine.setSilenceThreshold(value);
+                    else if (param === 'onsetSensitivity') this.engine.setOnsetSensitivity(value);
+                    else if (param === 'complexDomainWeight') this.engine.setComplexDomainWeight(value);
+                    else if (param === 'minBpm') this.engine.setMinBpm(value);
+                    else if (param === 'maxBpm') this.engine.setMaxBpm(value);
+                    else if (param === 'doubleTimeJumpThreshold') this.engine.setDoubleTimeJumpThreshold(value);
+                    else if (param === 'halfTimeJumpThreshold') this.engine.setHalfTimeJumpThreshold(value);
+                    else if (param === 'gatingAlpha') this.engine.setGatingAlpha(value);
+                    else if (param === 'noveltySmoothing') this.engine.setNoveltySmoothing(value);
+                    else if (param === 'fluxCompression') this.engine.setFluxCompression(value);
+                    else if (param === 'hysteresisBlend') this.engine.setHysteresisBlend(value);
+                    else if (param === 'magneticSnapRange') this.engine.setMagneticSnapRange(value);
                 }
             } else if (event.data.type === 'reset') {
                 if (this.engine) {

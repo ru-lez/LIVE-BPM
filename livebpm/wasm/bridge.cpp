@@ -1,5 +1,6 @@
 #include <emscripten/bind.h>
 #include "livebpm/Engine.h"
+#include "livebpm/Presets.h"
 
 using namespace emscripten;
 
@@ -48,6 +49,32 @@ public:
         result.set("processingTimeMs", r.processingTimeMs);
         return result;
     }
+    
+    val loadPreset(std::string name) {
+        livebpm::Config c = livebpm::GetPreset(name);
+        
+        // Pass the config to the engine
+        engine_->updateTunableConfig(c);
+
+        val result = val::object();
+        result.set("heuristics", c.useHeuristics);
+        result.set("silenceThreshold", c.SILENCE_THRESHOLD);
+        result.set("onsetSensitivity", c.onsetSensitivity);
+        result.set("complexDomainWeight", c.complexDomainWeight);
+        result.set("uiSmoothing", c.uiSmoothing);
+        result.set("visualDeadzone", c.VISUAL_DEADZONE);
+        result.set("minBpm", c.minBpm);
+        result.set("maxBpm", c.maxBpm);
+        result.set("doubleTimeJumpThreshold", c.doubleTimeJumpThreshold);
+        result.set("halfTimeJumpThreshold", c.halfTimeJumpThreshold);
+        result.set("gatingAlpha", c.gatingAlpha);
+        result.set("noveltySmoothing", c.noveltySmoothing);
+        result.set("fluxCompression", c.fluxCompression);
+        result.set("hysteresisBlend", c.hysteresisBlend);
+        result.set("magneticSnapRange", c.magneticSnapRange);
+        
+        return result;
+    }
 
     void setTargetResolution(livebpm::NoteResolution res) {
         engine_->setTargetResolution(res); 
@@ -80,6 +107,21 @@ public:
     }
     void setHalfTimeJumpThreshold(double val) { 
         engine_->setHalfTimeJumpThreshold(val); 
+    }
+    void setGatingAlpha(double val) { 
+        engine_->setGatingAlpha(val); 
+    }
+    void setNoveltySmoothing(double val) { 
+        engine_->setNoveltySmoothing(val); 
+    }
+    void setFluxCompression(double val) { 
+        engine_->setFluxCompression(val); 
+    }
+    void setHysteresisBlend(double val) { 
+        engine_->setHysteresisBlend(val); 
+    }
+    void setMagneticSnapRange(double val) { 
+        engine_->setMagneticSnapRange(val); 
     }
 
 private:
@@ -115,5 +157,11 @@ EMSCRIPTEN_BINDINGS(livebpm) {
         .function("setMinBpm", &LiveBpmWasm::setMinBpm)
         .function("setMaxBpm", &LiveBpmWasm::setMaxBpm)
         .function("setDoubleTimeJumpThreshold", &LiveBpmWasm::setDoubleTimeJumpThreshold)
-        .function("setHalfTimeJumpThreshold", &LiveBpmWasm::setHalfTimeJumpThreshold);
+        .function("setHalfTimeJumpThreshold", &LiveBpmWasm::setHalfTimeJumpThreshold)
+        .function("setGatingAlpha", &LiveBpmWasm::setGatingAlpha)
+        .function("setNoveltySmoothing", &LiveBpmWasm::setNoveltySmoothing)
+        .function("setFluxCompression", &LiveBpmWasm::setFluxCompression)
+        .function("setHysteresisBlend", &LiveBpmWasm::setHysteresisBlend)
+        .function("setMagneticSnapRange", &LiveBpmWasm::setMagneticSnapRange)
+        .function("loadPreset", &LiveBpmWasm::loadPreset);
 }

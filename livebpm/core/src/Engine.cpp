@@ -70,8 +70,6 @@ namespace livebpm {
 
 struct Engine::Impl {
     // Magic numbers
-    static constexpr float GATING_ALPHA = 0.1f;
-    static constexpr float FLUX_COMPRESSION_LAMBDA = 50.0f;
     static constexpr double FAST_TEMPO_THRESHOLD = 140.0;
     static constexpr double SILENCE_TIMEOUT_SEC = 2.0;
     static constexpr int WARMUP_HOPS = 50;
@@ -255,14 +253,14 @@ struct Engine::Impl {
             ? (semitoneFlux - gating.semitoneFluxMovingAverage)
             : 0.0f;
         gating.semitoneFluxMovingAverage =
-            GATING_ALPHA * semitoneFlux + (1.0f - GATING_ALPHA) * gating.semitoneFluxMovingAverage;
+            static_cast<float>(config.gatingAlpha) * semitoneFlux + (1.0f - static_cast<float>(config.gatingAlpha)) * gating.semitoneFluxMovingAverage;
 
         float complexThreshold = gating.complexFluxMovingAverage + static_cast<float>(config.onsetSensitivity);
         float gatedComplex = (complexFlux > complexThreshold)
             ? (complexFlux - gating.complexFluxMovingAverage)
             : 0.0f;
         gating.complexFluxMovingAverage =
-            GATING_ALPHA * complexFlux + (1.0f - GATING_ALPHA) * gating.complexFluxMovingAverage;
+            static_cast<float>(config.gatingAlpha) * complexFlux + (1.0f - static_cast<float>(config.gatingAlpha)) * gating.complexFluxMovingAverage;
 
         // ---- Normalise complex stream to comparable scale ----
         // Semitone flux is bounded [0, 1]; complex domain isn't. Dividing by
@@ -287,7 +285,7 @@ struct Engine::Impl {
         }
 
         // Logarithmic compression
-        return std::log1p(FLUX_COMPRESSION_LAMBDA * combinedFlux);
+        return std::log1p(static_cast<float>(config.fluxCompression) * combinedFlux);
     }
 
     void updateSilenceAndGating(float rawNovelty) {
@@ -309,7 +307,10 @@ struct Engine::Impl {
         }
 
         // Apply a smoothing filter to round off jagged legato peaks
-        gating.noveltyMovingAverage = 0.6f * gating.noveltyMovingAverage + 0.4f * rawNovelty;
+        gating.noveltyMovingAverage = 
+            (1.0f - static_cast<float>(config.noveltySmoothing)) * gating.noveltyMovingAverage + 
+            static_cast<float>(config.noveltySmoothing) * rawNovelty;
+
         float noveltyVal = gating.noveltyMovingAverage;
 
         // Store in novelty buffer
@@ -477,7 +478,7 @@ struct Engine::Impl {
                     tempo.currentStableBpm = currentBpm;
                 } else {
                     // Stiffen the glide so FFT window drift can't drag it down
-                    tempo.currentStableBpm = 0.95 * tempo.currentStableBpm + 0.05 * currentBpm;
+                    tempo.currentStableBpm = (1.0 - config.hysteresisBlend) * tempo.currentStableBpm + config.hysteresisBlend * currentBpm;
                     // Assign the smoothed value back
                     currentBpm = tempo.currentStableBpm;
                 }
@@ -575,6 +576,24 @@ Result Engine::getLatestResult() const {
 double Engine::getVisualDeadzone() const {
     return pImpl_->config.VISUAL_DEADZONE;
 }
+
+void Engine::updateTunableConfig(const Config& config) {
+    setHeuristicsEnabled(config.useHeuristics);
+    setSilenceThreshold(config.SILENCE_THRESHOLD);
+    setOnsetSensitivity(config.onsetSensitivity);
+    setComplexDomainWeight(config.complexDomainWeight);
+    setMinBpm(config.minBpm);
+    setMaxBpm(config.maxBpm);
+    setDoubleTimeJumpThreshold(config.doubleTimeJumpThreshold);
+    setHalfTimeJumpThreshold(config.halfTimeJumpThreshold);
+    setGatingAlpha(config.gatingAlpha);
+    setNoveltySmoothing(config.noveltySmoothing);
+    setFluxCompression(config.fluxCompression);
+    setHysteresisBlend(config.hysteresisBlend);
+    
+    // uiSmoothing and VISUAL_DEADZONE are not set here as they are handled in the consumer application (CLI or WASM)
+}
+
 void Engine::setTargetResolution(NoteResolution resolution) {
     if (pImpl_->config.targetResolution != resolution) {
         pImpl_->config.targetResolution = resolution;
@@ -607,6 +626,21 @@ void Engine::setDoubleTimeJumpThreshold(double threshold) {
 }
 void Engine::setHalfTimeJumpThreshold(double threshold) { 
     pImpl_->config.halfTimeJumpThreshold = threshold; 
+}
+void Engine::setGatingAlpha(double alpha) { 
+    pImpl_->config.gatingAlpha = alpha; 
+}
+void Engine::setNoveltySmoothing(double smoothing) { 
+    pImpl_->config.noveltySmoothing = smoothing; 
+}
+void Engine::setFluxCompression(double compression) { 
+    pImpl_->config.fluxCompression = compression; 
+}
+void Engine::setHysteresisBlend(double blend) { 
+    pImpl_->config.hysteresisBlend = blend; 
+}
+void Engine::setMagneticSnapRange(double range) {
+    pImpl_->config.magneticSnapRange = range;
 }
 
 void Engine::reset() {
