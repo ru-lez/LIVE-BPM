@@ -15,8 +15,16 @@ public:
     Result getLatestResult() const;
     void reset();
 
+    // Advanced Mode
     void setTargetResolution(NoteResolution resolution);
     void setHeuristicsEnabled(bool setting);
+    void setOnsetSensitivity(double sensitivity);
+    void setComplexDomainWeight(double weight);
+    void setSilenceThreshold(double threshold);
+    void setMinBpm(double minBpm);
+    void setMaxBpm(double maxBpm);
+    void setDoubleTimeJumpThreshold(double threshold);
+    void setHalfTimeJumpThreshold(double threshold);
 
     double getVisualDeadzone() const;
 

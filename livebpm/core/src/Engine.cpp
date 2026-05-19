@@ -70,7 +70,6 @@ namespace livebpm {
 
 struct Engine::Impl {
     // Magic numbers
-    static constexpr float GATING_OFFSET = 0.015f;
     static constexpr float GATING_ALPHA = 0.1f;
     static constexpr float FLUX_COMPRESSION_LAMBDA = 50.0f;
     static constexpr double FAST_TEMPO_THRESHOLD = 140.0;
@@ -251,14 +250,14 @@ struct Engine::Impl {
         );
 
         // ---- Adaptive gating - each stream against its own moving average ----
-        float semitoneThreshold = gating.semitoneFluxMovingAverage + GATING_OFFSET;
+        float semitoneThreshold = gating.semitoneFluxMovingAverage + static_cast<float>(config.onsetSensitivity);
         float gatedSemitone = (semitoneFlux > semitoneThreshold)
             ? (semitoneFlux - gating.semitoneFluxMovingAverage)
             : 0.0f;
         gating.semitoneFluxMovingAverage =
             GATING_ALPHA * semitoneFlux + (1.0f - GATING_ALPHA) * gating.semitoneFluxMovingAverage;
 
-        float complexThreshold = gating.complexFluxMovingAverage + GATING_OFFSET;
+        float complexThreshold = gating.complexFluxMovingAverage + static_cast<float>(config.onsetSensitivity);
         float gatedComplex = (complexFlux > complexThreshold)
             ? (complexFlux - gating.complexFluxMovingAverage)
             : 0.0f;
@@ -278,10 +277,13 @@ struct Engine::Impl {
         // complex domain contributes legato/phase-onset information.
         // During warm-up, rely on semitone flux only since complex MA is unreliable.
         float combinedFlux;
+        float cdWeight = static_cast<float>(config.complexDomainWeight);
+        
         if (gating.hopsProcessed < WARMUP_HOPS) {
             combinedFlux = gatedSemitone;
         } else {
-            combinedFlux = 0.6f * gatedSemitone + 0.4f * normalisedComplex;
+            // Dynamically balance the streams based on UI input
+            combinedFlux = (1.0f - cdWeight) * gatedSemitone + cdWeight * normalisedComplex;
         }
 
         // Logarithmic compression
@@ -570,11 +572,9 @@ void Engine::processBlock(const float* samples, int numSamples) {
 Result Engine::getLatestResult() const {
     return latestResult_;
 }
-
 double Engine::getVisualDeadzone() const {
     return pImpl_->config.VISUAL_DEADZONE;
 }
-
 void Engine::setTargetResolution(NoteResolution resolution) {
     if (pImpl_->config.targetResolution != resolution) {
         pImpl_->config.targetResolution = resolution;
@@ -582,11 +582,31 @@ void Engine::setTargetResolution(NoteResolution resolution) {
         reset(); // Flush the engine state to prevent weirdness when switching resolutions
     }
 }
-
 void Engine::setHeuristicsEnabled(bool setting) {
     pImpl_->config.useHeuristics = setting;
 
     reset(); // Flush the engine state to prevent weirdness when switching heuristics on/off
+}
+void Engine::setOnsetSensitivity(double sensitivity) { 
+    pImpl_->config.onsetSensitivity = sensitivity;
+}
+void Engine::setComplexDomainWeight(double weight) { 
+    pImpl_->config.complexDomainWeight = weight; 
+}
+void Engine::setSilenceThreshold(double threshold) { 
+    pImpl_->config.SILENCE_THRESHOLD = threshold; 
+}
+void Engine::setMinBpm(double minBpm) { 
+    pImpl_->config.minBpm = minBpm; 
+}
+void Engine::setMaxBpm(double maxBpm) { 
+    pImpl_->config.maxBpm = maxBpm; 
+}
+void Engine::setDoubleTimeJumpThreshold(double threshold) { 
+    pImpl_->config.doubleTimeJumpThreshold = threshold; 
+}
+void Engine::setHalfTimeJumpThreshold(double threshold) { 
+    pImpl_->config.halfTimeJumpThreshold = threshold; 
 }
 
 void Engine::reset() {

@@ -27,6 +27,12 @@ namespace livebpm {
         // Noise Gating threshold (Default: 0.03)
         double SILENCE_THRESHOLD = 0.03;
 
+        // Onset Sensitivity / Gating Offset (Default: 0.015)
+        double onsetSensitivity = 0.015;
+
+        // Complex Domain Weight [0.0 to 1.0] (Default: 0.4)
+        double complexDomainWeight = 0.4;
+
         // Visual Deadzone for display smoothing (Default: 0.1 BPM For Accuracy, increase to ~0.2 BPM to prevent jitter)
         double VISUAL_DEADZONE = 0.1;
 

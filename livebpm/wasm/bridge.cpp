@@ -60,6 +60,27 @@ public:
     void setUseHeuristics(bool setting) {
         engine_->setHeuristicsEnabled(setting);
     }
+    void setOnsetSensitivity(double val) { 
+        engine_->setOnsetSensitivity(val);
+    }
+    void setComplexDomainWeight(double val) {
+        engine_->setComplexDomainWeight(val);
+    }
+    void setSilenceThreshold(double val) {
+        engine_->setSilenceThreshold(val);
+    }
+    void setMinBpm(double val) { 
+        engine_->setMinBpm(val); 
+    }
+    void setMaxBpm(double val) { 
+        engine_->setMaxBpm(val); 
+    }
+    void setDoubleTimeJumpThreshold(double val) { 
+        engine_->setDoubleTimeJumpThreshold(val); 
+    }
+    void setHalfTimeJumpThreshold(double val) { 
+        engine_->setHalfTimeJumpThreshold(val); 
+    }
 
 private:
     std::unique_ptr<livebpm::Engine> engine_;
@@ -85,5 +106,14 @@ EMSCRIPTEN_BINDINGS(livebpm) {
         .function("setTargetResolution", &LiveBpmWasm::setTargetResolution)
         .function("getVisualDeadzone", &LiveBpmWasm::getVisualDeadzone)
         .function("reset", &LiveBpmWasm::reset)
-        .function("setUseHeuristics", &LiveBpmWasm::setUseHeuristics);
+
+        // Advanced Mode
+        .function("setUseHeuristics", &LiveBpmWasm::setUseHeuristics)
+        .function("setOnsetSensitivity", &LiveBpmWasm::setOnsetSensitivity)
+        .function("setComplexDomainWeight", &LiveBpmWasm::setComplexDomainWeight)
+        .function("setSilenceThreshold", &LiveBpmWasm::setSilenceThreshold)
+        .function("setMinBpm", &LiveBpmWasm::setMinBpm)
+        .function("setMaxBpm", &LiveBpmWasm::setMaxBpm)
+        .function("setDoubleTimeJumpThreshold", &LiveBpmWasm::setDoubleTimeJumpThreshold)
+        .function("setHalfTimeJumpThreshold", &LiveBpmWasm::setHalfTimeJumpThreshold);
 }

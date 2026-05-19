@@ -29,19 +29,21 @@
         }
         button {
             margin-top: 2rem; padding: 0.8rem 2rem; font-size: 1.1rem;
-            background: #00d4aa; color: #1a1a1a; border: none;
+            background: #00d4aa; color: #1a1a1a; border: 1px solid #00b490;
             border-radius: 8px; cursor: pointer; font-weight: 600;
         }
-        button:hover { background: #00f0c0; }
+        button:hover { background: #00f0c0; border-color: #00b490; }
         button:disabled { opacity: 0.4; cursor: not-allowed; }
         .status { margin-top: 1rem; font-size: 0.9rem; opacity: 0.5; }
         .note-resolution {
             margin-top: 1.5rem;
             display: flex;
             justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px 20px;
+            max-width: 90vw;
             gap: 20px;
         }
-
         .note-resolution label {
             display: flex;
             align-items: center;
@@ -50,10 +52,100 @@
             opacity: 0.9;
             white-space: nowrap;
         }
-
-        .note-resolution input[type="radio"], .note-resolution input[type="checkbox"] {
+        .note-resolution input[type="radio"] {
             margin-right: 8px;
             cursor: pointer;
+            accent-color: #00d4aa; 
+        }
+        .advanced-toggle { margin-top: 1.5rem; font-size: 0.9rem; opacity: 0.7; cursor: pointer; }
+        .advanced-menu {
+            display: none; background: #242424; border-radius: 8px; padding: 20px;
+            margin-top: 15px; text-align: left; 
+            width: 700px; max-width: 95vw;
+            margin-left: auto; margin-right: auto;
+            border: 1px solid #333;
+        }
+        .advanced-menu.active { display: block; }
+        .param-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            column-gap: 30px;
+            row-gap: 15px;
+        }
+        .param-group { 
+            margin-bottom: 0; 
+        }
+        .param-group label { 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 0.85rem; 
+            margin-bottom: 5px; 
+            color: #aaa; 
+        }
+        .param-group label.checkbox-label { 
+            align-items: center; 
+            cursor: pointer; 
+        }
+        .param-group input[type="range"] { 
+            width: 100%; 
+            accent-color: #00d4aa;
+            cursor: pointer;
+        }
+        .param-group input[type="checkbox"] { 
+            width: 16px; 
+            height: 16px; 
+            accent-color: #00d4aa; 
+            cursor: pointer; 
+        }
+        .menu-controls {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 25px;
+        }
+        .preset-select { 
+            flex: 0 1 300px;
+            width: 100%;
+            padding: 6px;
+            background: #1a1a1a;
+            color: #eee;
+            border: 1px solid #444;
+            border-radius: 4px;
+            margin-bottom: 0;
+        }
+        .action-buttons {
+            flex: 0 1 auto;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            gap: 15px;
+        }
+        .advanced-btn {
+            margin-top: 0;
+            padding: 5px 15px;
+            font-size: 0.9rem;
+            background: #333;
+            color: #eee;
+            border: 1px solid #555;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .reset-btn {
+            border-color: #ff8787;
+        }
+        .advanced-btn:hover {
+            background: #00f0c0;
+            color: #1a1a1a;
+            border-color: #00b490;
+        }
+        .reset-btn:hover {
+            background: #ff5656;
+            color: #1a1a1a;
+            border-color: #ff0000;
         }
     </style>
 </head>
@@ -95,13 +187,73 @@
                 1/16 Note
             </label>
         </div>
-        <div class="note-resolution">
-            <label>
-                <input type="checkbox" name="heuristicsCheckbox" checked onchange="toggleHeuristics(this.checked)"> 
-                Tempo Smoothing
-            </label>
+
+        <div class="advanced-toggle" onclick="document.getElementById('advMenu').classList.toggle('active')">
+            Advanced Menu &blacktriangledown;
         </div>
         
+        <div class="advanced-menu" id="advMenu">
+            <div class="menu-controls">
+                <select class="preset-select" id="presetSelect" onchange="loadPreset(this.value)">
+                    <option value="default">Default / General Purpose</option>
+                    <option value="flute">Legato (Flute, Saxo)</option>
+                    <option value="cajon">Percussive (Cajón, Guitar)</option>
+                    <option value="liveband">Full Band / Live Mix</option>
+                    <option value="slowacoustic">Ambient / Slow Acoustic</option>
+                </select>
+
+                <div class="action-buttons">
+                    <button class="advanced-btn" onclick="resetEngine()" title="Flush DSP State">Flush</button>
+                    <button class="advanced-btn reset-btn" onclick="resetSettings()" title="Revert to default settings">Reset</button>
+                </div>
+            </div>
+
+            <div class="param-grid">
+                <div class="param-group">
+                    <label class="checkbox-label">
+                        Tempo Smoothing (Heuristics)
+                        <input type="checkbox" id="heuristicsToggle" checked onchange="toggleHeuristics(this.checked)">
+                    </label>
+                </div>
+                <div class="param-group">
+                    <label>Noise Gate (Silence Threshold) <span id="silenceThresholdVal">0.030</span></label>
+                    <input type="range" id="silenceThreshold" min="0.0" max="0.1" step="0.005" value="0.03" oninput="updateParam('silenceThreshold', this.value)">
+                </div>
+                <div class="param-group">
+                    <label>Onset Sensitivity <span id="onsetSensitivityVal">0.015</span></label>
+                    <input type="range" id="onsetSensitivity" min="0.001" max="0.1" step="0.001" value="0.015" oninput="updateParam('onsetSensitivity', this.value)">
+                </div>
+                <div class="param-group">
+                    <label>Complex Domain Weight <span id="complexDomainWeightVal">0.40</span></label>
+                    <input type="range" id="complexDomainWeight" min="0.0" max="1.0" step="0.05" value="0.4" oninput="updateParam('complexDomainWeight', this.value)">
+                </div>
+                <div class="param-group">
+                    <label>UI Smoothing (Alpha) <span id="uiSmoothingVal">0.15</span></label>
+                    <input type="range" id="uiSmoothing" min="0.01" max="0.5" step="0.01" value="0.15" oninput="updateParam('uiSmoothing', this.value)">
+                </div>
+                <div class="param-group">
+                    <label>Visual Deadzone (BPM Drift) <span id="visualDeadzoneVal">0.20</span></label>
+                    <input type="range" id="visualDeadzone" min="0.0" max="5.0" step="0.1" value="0.2" oninput="updateParam('visualDeadzone', this.value)">
+                </div>
+                <div class="param-group">
+                    <label>Target Minimum BPM <span id="minBpmVal">40.0</span></label>
+                    <input type="range" id="minBpm" min="30.0" max="120.0" step="1.0" value="40.0" oninput="updateParam('minBpm', this.value)">
+                </div>
+                <div class="param-group">
+                    <label>Target Maximum BPM <span id="maxBpmVal">240.0</span></label>
+                    <input type="range" id="maxBpm" min="120.0" max="480.0" step="1.0" value="240.0" oninput="updateParam('maxBpm', this.value)">
+                </div>
+                <div class="param-group">
+                    <label>Double-Time Jump Hysteresis <span id="doubleTimeJumpThresholdVal">20.0</span></label>
+                    <input type="range" id="doubleTimeJumpThreshold" min="5.0" max="40.0" step="5.0" value="20.0" oninput="updateParam('doubleTimeJumpThreshold', this.value)">
+                </div>
+                <div class="param-group">
+                    <label>Half-Time Jump Hysteresis <span id="halfTimeJumpThresholdVal">10.0</span></label>
+                    <input type="range" id="halfTimeJumpThreshold" min="5.0" max="30.0" step="5.0" value="10.0" oninput="updateParam('halfTimeJumpThreshold', this.value)">
+                </div>
+            </div>
+        </div>
+
         <button id="startBtn" onclick="startAudio()" disabled>Start</button>
         <div class="status" id="status">Loading WASM...</div>
     </div>
@@ -113,7 +265,7 @@
 
         
         let currentDisplayBpm = 0.0;
-        const ALPHA = 0.15; // EMA smoothing factor (lower = smoother)
+        let ALPHA = 0.15; // EMA smoothing factor (lower = smoother)
         const CONF_THRESHOLD = 0.45; // Ignore incoming BPMs if confidence is below this
         let VISUAL_DEADZONE = 0.2; // BPM changes smaller than this won't update the display to prevent jitter. Default value, will be overridden by worklet message
 
@@ -156,7 +308,8 @@
                     if (type === 'ready') {
                         status.textContent = 'Listening... play a rhythm!';
                         btn.textContent = 'Listening...';
-                        VISUAL_DEADZONE = event.data.deadzone;
+
+                        syncParametersToEngine();
                     } else if (type === 'result') {
                         updateDisplay(data);
                     } else if (type === 'error') {
@@ -202,6 +355,136 @@
                 // Flush the UI state
                 flushUIState();
             }
+        };
+
+        window.updateParam = function(param, value) {
+            value = parseFloat(value);
+
+            // Format whole numbers for BPM limits and thresholds
+            if (['minBpm', 'maxBpm', 'doubleTimeJumpThreshold', 'halfTimeJumpThreshold'].includes(param)) {
+                document.getElementById(param + 'Val').textContent = value.toFixed(1);
+            } else if (param === 'visualDeadzone') {
+                document.getElementById(param + 'Val').textContent = value.toFixed(2);
+            } else {
+                document.getElementById(param + 'Val').textContent = value.toFixed(3);
+            }
+            
+            if (param === 'uiSmoothing') {
+                ALPHA = value; // Update JS-side parameter directly
+                return;
+            }
+            
+            if (param === 'visualDeadzone') {
+                VISUAL_DEADZONE = value; // Update JS-side parameter directly
+                return;
+            }
+            
+            // Dispatch C++ parameter changes to the worklet
+            if (audioWorkletNode) {
+                audioWorkletNode.port.postMessage({
+                    type: 'setParameter',
+                    param: param,
+                    value: value
+                });
+            }
+        };
+
+        function syncParametersToEngine() {
+            // Sync radio buttons (Resolution)
+            const res = document.querySelector('input[name="resolution"]:checked').value;
+            window.updateNoteResolution(res);
+
+            // Sync toggle (Heuristics)
+            const heuristics = document.getElementById('heuristicsToggle').checked;
+            window.toggleHeuristics(heuristics);
+
+            // Sync all range sliders
+            const params = [
+                'silenceThreshold', 'onsetSensitivity', 'complexDomainWeight', 
+                'uiSmoothing', 'minBpm', 'maxBpm', 
+                'doubleTimeJumpThreshold', 'halfTimeJumpThreshold', 'visualDeadzone'
+            ];
+            
+            params.forEach(param => {
+                const el = document.getElementById(param);
+                if (el) {
+                    window.updateParam(param, el.value);
+                }
+            });
+        }
+
+        window.loadPreset = function(preset) {
+            const settings = {
+                default: { 
+                    heuristics: true, silenceThreshold: 0.03, onsetSensitivity: 0.015, complexDomainWeight: 0.4, uiSmoothing: 0.15,
+                    visualDeadzone: 0.20, minBpm: 40.0, maxBpm: 240.0, doubleTimeJumpThreshold: 20.0, halfTimeJumpThreshold: 10.0
+                },
+                flute: { 
+                    heuristics: true, silenceThreshold: 0.02, onsetSensitivity: 0.015, complexDomainWeight: 0.6, uiSmoothing: 0.2,
+                    visualDeadzone: 0.25, minBpm: 40.0, maxBpm: 200.0, doubleTimeJumpThreshold: 25.0, halfTimeJumpThreshold: 15.0
+                },
+                cajon: { 
+                    heuristics: true, silenceThreshold: 0.06, onsetSensitivity: 0.06, complexDomainWeight: 0.0, uiSmoothing: 0.3,
+                    visualDeadzone: 0.10, minBpm: 60.0, maxBpm: 240.0, doubleTimeJumpThreshold: 30.0, halfTimeJumpThreshold: 15.0
+                },
+                liveband: { 
+                    heuristics: true, silenceThreshold: 0.04, onsetSensitivity: 0.03, complexDomainWeight: 0.5, uiSmoothing: 0.2,
+                    visualDeadzone: 0.20, minBpm: 50.0, maxBpm: 220.0, doubleTimeJumpThreshold: 20.0, halfTimeJumpThreshold: 10.0
+                },
+                slowacoustic: { 
+                    heuristics: false, silenceThreshold: 0.01, onsetSensitivity: 0.005, complexDomainWeight: 0.75, uiSmoothing: 0.05,
+                    visualDeadzone: 0.30, minBpm: 30.0, maxBpm: 120.0, doubleTimeJumpThreshold: 40.0, halfTimeJumpThreshold: 10.0
+                }
+            };
+
+            const config = settings[preset];
+            if (config) {
+                // Update Sliders
+                const heuristicsBox = document.getElementById('heuristicsToggle');
+                heuristicsBox.checked = config.heuristics;
+                window.toggleHeuristics(config.heuristics);
+
+                document.getElementById('silenceThreshold').value = config.silenceThreshold;
+                window.updateParam('silenceThreshold', config.silenceThreshold);
+                
+                document.getElementById('onsetSensitivity').value = config.onsetSensitivity;
+                window.updateParam('onsetSensitivity', config.onsetSensitivity);
+                
+                document.getElementById('complexDomainWeight').value = config.complexDomainWeight;
+                window.updateParam('complexDomainWeight', config.complexDomainWeight);
+                
+                document.getElementById('uiSmoothing').value = config.uiSmoothing;
+                window.updateParam('uiSmoothing', config.uiSmoothing);
+
+                document.getElementById('visualDeadzone').value = config.visualDeadzone;
+                window.updateParam('visualDeadzone', config.visualDeadzone);
+                
+                document.getElementById('minBpm').value = config.minBpm;
+                window.updateParam('minBpm', config.minBpm);
+
+                document.getElementById('maxBpm').value = config.maxBpm;
+                window.updateParam('maxBpm', config.maxBpm);
+
+                document.getElementById('doubleTimeJumpThreshold').value = config.doubleTimeJumpThreshold;
+                window.updateParam('doubleTimeJumpThreshold', config.doubleTimeJumpThreshold);
+
+                document.getElementById('halfTimeJumpThreshold').value = config.halfTimeJumpThreshold;
+                window.updateParam('halfTimeJumpThreshold', config.halfTimeJumpThreshold);
+                
+                flushUIState(); // Reset the tracking grid when changing profiles
+            }
+        };
+
+        window.resetEngine = function() {
+            if (audioWorkletNode) {
+                audioWorkletNode.port.postMessage({ type: 'reset' });
+                flushUIState();
+            }
+        };
+
+        window.resetSettings = function() {
+            const currentPreset = document.getElementById('presetSelect').value;
+            window.loadPreset(currentPreset);
         };
 
         function flushUIState() {

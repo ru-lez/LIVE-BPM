@@ -41,6 +41,36 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
                 if (this.engine) {
                     this.engine.setUseHeuristics(event.data.enabled);
                 }
+            } else if (event.data.type === 'setParameter') {
+                if (this.engine) {
+                    switch(event.data.param) {
+                        case 'onsetSensitivity': 
+                            this.engine.setOnsetSensitivity(event.data.value); 
+                            break;
+                        case 'complexDomainWeight': 
+                            this.engine.setComplexDomainWeight(event.data.value); 
+                            break;
+                        case 'silenceThreshold': 
+                            this.engine.setSilenceThreshold(event.data.value); 
+                            break;
+                        case 'minBpm':
+                            this.engine.setMinBpm(event.data.value);
+                            break;
+                        case 'maxBpm':
+                            this.engine.setMaxBpm(event.data.value);
+                            break;
+                        case 'doubleTimeJumpThreshold':
+                            this.engine.setDoubleTimeJumpThreshold(event.data.value);
+                            break;
+                        case 'halfTimeJumpThreshold':
+                            this.engine.setHalfTimeJumpThreshold(event.data.value);
+                            break;
+                    }
+                }
+            } else if (event.data.type === 'reset') {
+                if (this.engine) {
+                    this.engine.reset();
+                }
             }
         };
     }
