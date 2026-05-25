@@ -131,6 +131,38 @@ Audio
 * **Catch2**: Testing framework (BSL-1.0)
 
 
+## Target Note Resolution
+
+By default, the LiveBPM engine assumes the most prominent rhythmic pulse it hears is the standard "Quarter Note" (the main beat). However, if a musician is playing rapid 16th-note arpeggios or slow, sweeping half-note chords, the engine might report the tempo as 4x too fast or 2x too slow. 
+
+The **Note Resolution** setting allows you to tell the DSP engine exactly how to interpret the rhythmic density of the audio stream.
+
+**1/4 Note (Quarter)** · *Default*
+The standard metronome setting. The engine assumes every major pulse it detects equals one beat.
+- **Best for:** Standard playing, 4/4 time signatures, and most modern pop/rock/electronic music where the downbeat is clearly defined.
+
+**Smart (Mixed) Mode**
+An advanced fusion mode designed to track highly syncopated rhythms without losing the primary master tempo. Instead of locking into a single grid, this mode uses Subdivision Folding. 
+- **Best for:** Complex grooves with scattered ghost notes, or drummers who frequently switch between standard rock beats and dense 16th-note hi-hat patterns. 
+- **How it works:** The engine evaluates the main Quarter Note pulse, but "folds" the energy of the underlying 8th and 16th notes into the main score. Furthermore, if the tempo exceeds 135 BPM, it applies an aggressive penalty if it detects a strong half-time groove underneath, actively suppressing false double-time errors. Breakthrough logic is disabled to ensure maximum stability.
+
+**1/2 Note (Half)** · *Multiplies engine BPM by 2.0*
+The engine assumes the pulses it hears are lasting for two full beats. 
+- **Best for:** Ambient music, slow orchestral swells, or doom metal where the dominant rhythmic changes only occur on beats 1 and 3 (or once per bar). It prevents the engine from dropping into an artificially slow BPM.
+
+**1/8 Note (Eighth)** · *Multiplies engine BPM by 0.5*
+The engine assumes it is hearing two pulses for every single beat.
+- **Best for:** Aggressive 8th-note guitar strumming, driving punk rock basslines, or rapid hi-hat patterns. It prevents the engine from accidentally doubling the reported tempo when the musician is "playing eighths."
+
+**1/8 Note Triplet** · *Multiplies engine BPM by ~0.667*
+The engine assumes it is hearing three evenly spaced pulses per beat.
+- **Best for:** Blues, shuffle grooves, jazz ride cymbal patterns, and 6/8 or 12/8 time signatures. It ensures the mathematical "swing" doesn't confuse the beat tracker into outputting fractional or unstable tempos.
+
+**1/16 Note (Sixteenth)** · *Multiplies engine BPM by 0.25*
+The engine assumes it is hearing four rapid pulses for every single beat.
+- **Best for:** Fast electronic/trap hi-hats, rapid acoustic fingerpicking, or complex drum solos. It allows the engine to track incredibly fast subdivisions (e.g., 512 hits per minute) while still displaying the readable master tempo (e.g., 128 BPM).
+
+
 ## Advanced Parameters
 
 The browser UI exposes an **Advanced** panel with fine-grained controls over the detection engine. Parameters are grouped into three sections.
