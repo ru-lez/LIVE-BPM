@@ -23,8 +23,11 @@ namespace livebpm {
             c.maxBpm = 200.0;
             c.doubleTimeJumpThreshold = 25.0;
             c.halfTimeJumpThreshold = 15.0;
-        } 
-        else if (name == "guitar") {
+            c.fastTempoThreshold = 130.0; 
+            c.silenceTimeoutSec = 1.5;
+            c.warmupHops = 80;
+            c.confThreshold = 0.45;
+        } else if (name == "guitar") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.03;
             c.onsetSensitivity = 0.018;  
@@ -40,6 +43,10 @@ namespace livebpm {
             c.maxBpm = 240.0;
             c.doubleTimeJumpThreshold = 25.0;
             c.halfTimeJumpThreshold = 10.0;
+            c.fastTempoThreshold = 150.0;
+            c.silenceTimeoutSec = 2.0;
+            c.warmupHops = 40;
+            c.confThreshold = 0.50;
         } else if (name == "electricguitar") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.02;
@@ -56,6 +63,10 @@ namespace livebpm {
             c.maxBpm = 240.0;
             c.doubleTimeJumpThreshold = 25.0; 
             c.halfTimeJumpThreshold = 10.0;
+            c.fastTempoThreshold = 150.0;
+            c.silenceTimeoutSec = 2.0;
+            c.warmupHops = 40;
+            c.confThreshold = 0.50;
         } else if (name == "saxophone") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.020; 
@@ -72,8 +83,11 @@ namespace livebpm {
             c.maxBpm = 240.0;
             c.doubleTimeJumpThreshold = 20.0;
             c.halfTimeJumpThreshold = 10.0;
-        } 
-        else if (name == "acousticbass" || name == "acoustic bass") {
+            c.fastTempoThreshold = 140.0;
+            c.silenceTimeoutSec = 2.0;
+            c.warmupHops = 60;
+            c.confThreshold = 0.45;
+        } else if (name == "acousticbass" || name == "acoustic bass") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.025; 
             c.onsetSensitivity = 0.020;
@@ -89,6 +103,10 @@ namespace livebpm {
             c.maxBpm = 200.0;
             c.doubleTimeJumpThreshold = 20.0;
             c.halfTimeJumpThreshold = 15.0;
+            c.fastTempoThreshold = 130.0;
+            c.silenceTimeoutSec = 2.0;
+            c.warmupHops = 40;
+            c.confThreshold = 0.40;
         } else if (name == "electricbass") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.015;
@@ -105,6 +123,10 @@ namespace livebpm {
             c.maxBpm = 200.0;
             c.doubleTimeJumpThreshold = 20.0;
             c.halfTimeJumpThreshold = 10.0;
+            c.fastTempoThreshold = 130.0;
+            c.silenceTimeoutSec = 2.0;
+            c.warmupHops = 40;
+            c.confThreshold = 0.40;
         } else if (name == "cajon") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.03;
@@ -121,8 +143,11 @@ namespace livebpm {
             c.maxBpm = 280.0;
             c.doubleTimeJumpThreshold = 10.0;
             c.halfTimeJumpThreshold = 15.0;
-        } 
-        else if (name == "liveband") {
+            c.fastTempoThreshold = 160.0;
+            c.silenceTimeoutSec = 1.0;
+            c.warmupHops = 20;
+            c.confThreshold = 0.60;
+        } else if (name == "liveband") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.04;
             c.onsetSensitivity = 0.03;
@@ -138,8 +163,11 @@ namespace livebpm {
             c.maxBpm = 220.0;
             c.doubleTimeJumpThreshold = 20.0;
             c.halfTimeJumpThreshold = 10.0;
-        } 
-        else if (name == "slowacoustic") {
+            c.fastTempoThreshold = 150.0;
+            c.silenceTimeoutSec = 3.0;
+            c.warmupHops = 60;
+            c.confThreshold = 0.30;
+        } else if (name == "slowacoustic") {
             c.useHeuristics = false;
             c.SILENCE_THRESHOLD = 0.01;
             c.onsetSensitivity = 0.005;
@@ -155,6 +183,10 @@ namespace livebpm {
             c.maxBpm = 120.0;
             c.doubleTimeJumpThreshold = 40.0;
             c.halfTimeJumpThreshold = 10.0;
+            c.fastTempoThreshold = 100.0;
+            c.silenceTimeoutSec = 4.0;
+            c.warmupHops = 80;
+            c.confThreshold = 0.30;
         }
 
         return c;

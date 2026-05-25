@@ -32,6 +32,12 @@ public:
     void setFluxCompression(double compression);
     void setHysteresisBlend(double blend);
     void setMagneticSnapRange(double range);
+    void setFastTempoThreshold(double value);
+    void setSilenceTimeoutSec(double value);
+    void setWarmupHops(int value);
+    void setUiSmoothing(double alpha);
+    void setVisualDeadzone(double deadzone);
+    void setConfThreshold(double value);
 
     double getVisualDeadzone() const;
 

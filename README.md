@@ -169,6 +169,11 @@ Moving average applied to the raw beat-energy stream.
 - **Low:** Faster reaction to beat changes; may jitter under unsteady or rubato playing.
 - **High:** Smoother, more stable output with a slight delay when tempo shifts suddenly.
 
+**Silence Timeout** · default `2.0` · range `0.5 – 5.0`
+Duration of continuous silence (in seconds) required before the engine completely flushes its rolling history buffer and resets.
+- **Low:** Flushes the engine almost immediately during brief pauses, requiring it to start from scratch when playing resumes.
+- **High:** Allows the musician to hold long, dramatic pauses without the engine losing the established tempo context.
+
 ---
 
 ### Tempo Engine & Hysteresis
@@ -203,6 +208,16 @@ Confidence delta required before the engine accepts a sudden halving of BPM (e.g
 - **Low:** BPM can drop to half speed with little evidence (less resistant to half-time errors).
 - **High:** Engine demands a very strong signal before accepting a ½× drop (more resistant to half-time errors).
 
+**Warmup Hops** · default `50` · range `10 – 250`
+The minimum amount of audio history the engine must silently collect before it turns on the tempo estimator. 
+- **Low:** Outputs a BPM almost instantly (e.g., ~0.2 seconds), but the initial reading may be erratic as the buffer lacks data.
+- **High:** Forces the engine to wait and accumulate a mathematically solid pattern (e.g., over 2 seconds), resulting in a highly accurate but delayed first reading.
+
+**Fast Tempo Threshold** · default `140.0` · range `100.0 – 200.0`
+The BPM boundary where the engine's heuristics automatically activate to aggressively scan for alternating "strum-tap" patterns.
+- **Low:** Starts penalising double-time readings at moderately slow speeds. May accidentally halve the tempo of genuinely fast, aggressive playing.
+- **High:** Allows the engine to freely track fast tempos without heuristic interference, but increases the risk of double-time octave errors.
+
 ---
 
 ### Display Output
@@ -221,6 +236,11 @@ Minimum BPM change required before the on-screen number updates.
 Snaps the displayed BPM to the nearest whole number when within this range.
 - **Low (0):** Shows the raw decimal BPM (e.g. 127.85).
 - **High:** Snaps aggressively over a wider range (e.g. 127.4 rounds to 127), keeping the display clean for live musicians.
+
+**Confidence Threshold** · default `0.45` · range `0.0 – 1.0`
+The minimum dynamic programming score (based on alignment, stability, and coverage) required before the engine sends an updated BPM to the visual display.
+- **Low:** The UI updates constantly even if the audio is messy, ambiguous, or pure background noise.
+- **High:** The UI only updates when the rhythmic pulse is mathematically undeniable, perfectly stable but may visibly freeze during complex fills or muddy audio.
 
 ---
 

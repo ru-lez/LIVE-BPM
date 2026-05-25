@@ -37,6 +37,8 @@ namespace livebpm {
         double VISUAL_DEADZONE = 0.1;
         // Magnetic Snapping
         double magneticSnapRange = 0.15;
+        // Minimum confidence score required before accepting or displaying a tempo estimate
+        double confThreshold = 0.45;
 
         // How fast the dynamic gate threshold adapts to volume changes
         double gatingAlpha = 0.1;
@@ -49,6 +51,13 @@ namespace livebpm {
 
         // Whether to apply heuristics for fast tempo detection and octave error correction
         bool useHeuristics = true; 
+
+        // BPM threshold above which fast-tempo heuristics and octave-correction
+        double fastTempoThreshold = 140.0;
+        // Duration of continuous silence before the detector resets or suspends
+        double silenceTimeoutSec = 2.0;
+        // Number of analysis hops required before tempo estimation is considered
+        int warmupHops = 50;
 
         // Target note resolution for tempo estimation (Default: Quarter Notes)
         NoteResolution targetResolution = NoteResolution::QuarterNote;

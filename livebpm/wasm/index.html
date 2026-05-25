@@ -71,7 +71,7 @@
         .advanced-menu {
             display: none; background: #242424; border-radius: 8px; padding: 20px;
             margin-top: 15px; text-align: left; 
-            width: 900px; max-width: 90vw;
+            width: 1200px; max-width: 90vw;
             margin-left: auto; margin-right: auto;
             border: 1px solid #333;
         }
@@ -310,6 +310,12 @@
                         </label>
                         <input type="range" id="noveltySmoothing" min="0.05" max="0.9" step="0.05" value="0.4" oninput="updateParam('noveltySmoothing', this.value)">
                     </div>
+                    <div class="param-group">
+                        <label data-tip="Seconds of silence required before the engine flushes its internal state.">
+                            Silence Timeout (sec) <span id="silenceTimeoutSecVal">2.0</span>
+                        </label>
+                        <input type="range" id="silenceTimeoutSec" min="0.5" max="5.0" step="0.5" value="2.0" oninput="updateParam('silenceTimeoutSec', this.value)">
+                    </div>
                 </div>
             </div>
 
@@ -352,6 +358,18 @@
                         </label>
                         <input type="range" id="halfTimeJumpThreshold" min="5.0" max="30.0" step="5.0" value="10.0" oninput="updateParam('halfTimeJumpThreshold', this.value)">
                     </div>
+                    <div class="param-group">
+                        <label data-tip="BPM threshold above which fast-tempo heuristics and octave-correction logic become more aggressive to reduce half-time detection errors.">
+                            Fast Tempo Threshold <span id="fastTempoThresholdVal">140</span>
+                        </label>
+                        <input type="range" id="fastTempoThreshold" min="100" max="200" step="1" value="140" oninput="updateParam('fastTempoThreshold', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label data-tip="Number of frames to wait on startup before producing a valid estimate.">
+                            Warmup Hops <span id="warmupHopsVal">50</span>
+                        </label>
+                        <input type="range" id="warmupHops" min="10" max="250" step="10" value="50" oninput="updateParam('warmupHops', this.value)">
+                    </div>
                 </div>
             </div>
 
@@ -376,6 +394,12 @@
                         </label>
                         <input type="range" id="magneticSnapRange" min="0.0" max="0.5" step="0.05" value="0.15" oninput="updateParam('magneticSnapRange', this.value)">
                     </div>
+                    <div class="param-group">
+                        <label data-tip="The minimum confidence score required to update the BPM display. Higher values improve stability and reject uncertain detections.">
+                            Confidence Threshold <span id="confThresholdVal">0.45</span>
+                        </label>
+                        <input type="range" id="confThreshold" min="0.0" max="0.95" step="0.05" value="0.45" oninput="updateParam('confThreshold', this.value)">
+                    </div>
                 </div>
             </div>
         </div>
@@ -391,17 +415,17 @@
 
         const DisplayState = {
             currentBpm: 0.0,
-            confThreshold: 0.45,     // Ignore incoming BPMs if confidence is below this
+            confThreshold: 0.45,     // Ignore incoming BPMs if confidence is below this, will be overridden by worklet message
             alpha: 0.15,             // EMA smoothing factor (lower = smoother) Default value, will be overridden by worklet message
             visualDeadzone: 0.1,     // BPM changes smaller than this won't update the display to prevent jitter. Default value, will be overridden by worklet message
             magneticSnapRange: 0.10  // Default value, will be overridden by worklet message
         };
 
         const PARAM_DECIMALS = {
-            minBpm: 0, maxBpm: 0, doubleTimeJumpThreshold: 0, halfTimeJumpThreshold: 0, fluxCompression: 0,
-            visualDeadzone: 1,
+            minBpm: 0, maxBpm: 0, doubleTimeJumpThreshold: 0, halfTimeJumpThreshold: 0, fluxCompression: 0, warmupHops: 0, fastTempoThreshold: 0,
+            visualDeadzone: 1, silenceTimeoutSec: 1,
             complexDomainWeight: 2, gatingAlpha: 2, noveltySmoothing: 2, hysteresisBlend: 2, uiSmoothing: 2,
-            magneticSnapRange: 2
+            magneticSnapRange: 2, confThreshold: 2
             // Anything not in this list defaults to 3 decimal places
         };
 
@@ -487,13 +511,14 @@
                 DisplayState.alpha = config.uiSmoothing;
                 DisplayState.visualDeadzone = config.visualDeadzone;
                 DisplayState.magneticSnapRange = config.magneticSnapRange;
+                DisplayState.confThreshold = config.confThreshold;
                 
                 // Update Checkbox
-                document.getElementById('heuristicsToggle').checked = config.heuristics;
+                document.getElementById('heuristicsToggle').checked = config.useHeuristics;
                 
                 // Loop over the config payload to update sliders
                 for (const param in config) {
-                    if (param === 'heuristics') continue; // Skip boolean
+                    if (param === 'useHeuristics') continue; // Skip boolean
                     
                     const el = document.getElementById(param);
                     const textEl = document.getElementById(param + 'Val');
@@ -539,20 +564,11 @@
             const decimals = PARAM_DECIMALS[param] !== undefined ? PARAM_DECIMALS[param] : 3;
             document.getElementById(param + 'Val').textContent = value.toFixed(decimals);
             
-            if (param === 'uiSmoothing') {
-                DisplayState.alpha = value; // Update JS-side parameter directly
-                return;
-            }
-            
-            if (param === 'visualDeadzone') {
-                DisplayState.visualDeadzone = value; // Update JS-side parameter directly
-                return;
-            }
-
-            if (param === 'magneticSnapRange') {
-                DisplayState.magneticSnapRange = value; // Update JS-side parameter directly
-                return;
-            }
+            // Update JS-side parameter directly
+            if (param === 'uiSmoothing') DisplayState.alpha = value;
+            if (param === 'visualDeadzone') DisplayState.visualDeadzone = value;
+            if (param === 'magneticSnapRange') DisplayState.magneticSnapRange = value;
+            if (param === 'confThreshold') DisplayState.confThreshold = value;
             
             // Dispatch C++ parameter changes to the worklet
             if (audioWorkletNode) {

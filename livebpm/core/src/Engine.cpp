@@ -69,11 +69,6 @@
 namespace livebpm {
 
 struct Engine::Impl {
-    // Magic numbers
-    static constexpr double FAST_TEMPO_THRESHOLD = 140.0;
-    static constexpr double SILENCE_TIMEOUT_SEC = 2.0;
-    static constexpr int WARMUP_HOPS = 50;
-
     Config config;
 
     // FFT and buffer state
@@ -277,7 +272,7 @@ struct Engine::Impl {
         float combinedFlux;
         float cdWeight = static_cast<float>(config.complexDomainWeight);
         
-        if (gating.hopsProcessed < WARMUP_HOPS) {
+        if (gating.hopsProcessed < config.warmupHops) {
             combinedFlux = gatedSemitone;
         } else {
             // Dynamically balance the streams based on UI input
@@ -296,7 +291,7 @@ struct Engine::Impl {
 
             // Only bleed the engine state if the silence has lasted for > 2 seconds
             // featureRate = hops per second, so 2.0 * featureRate = 2 seconds
-            if (tempo.consecutiveSilenceHops > static_cast<int>(SILENCE_TIMEOUT_SEC * fft.featureRate)) {
+            if (tempo.consecutiveSilenceHops > static_cast<int>(config.silenceTimeoutSec * fft.featureRate)) {
                 tempo.currentStableBpm = tempo.currentStableBpm * 0.95; 
                 tempo.highBpmConfirmationCount = 0; 
                 tempo.octaveMismatchCount = 0; 
@@ -383,7 +378,7 @@ struct Engine::Impl {
         int noveltyLen = getNoveltyLength();
 
         // --- A. Analyse (Alternation Check) ---
-        if (currentBpm > FAST_TEMPO_THRESHOLD) { 
+        if (currentBpm > config.fastTempoThreshold) { 
             int beatLag = static_cast<int>(60.0 / currentBpm * fft.featureRate);
             
             if (noveltyLen > beatLag * 4) {
@@ -424,7 +419,7 @@ struct Engine::Impl {
             dynamicThreshold = 1.15f; // Strict if locked at slow speed
         }
 
-        if (currentBpm > FAST_TEMPO_THRESHOLD) {
+        if (currentBpm > config.fastTempoThreshold) {
             int beatLag = static_cast<int>(60.0 / currentBpm * fft.featureRate);
             
             // Veto if there is enough data
@@ -512,7 +507,7 @@ void Engine::processBlock(const float* samples, int numSamples) {
     // Re-estimate tempo
     int noveltyLen = d.getNoveltyLength();
 
-    if (noveltyLen > 50) {
+    if (noveltyLen > d.config.warmupHops) {
         
         // Mathematical scale based on user input
         float inputScale = 1.0f;
@@ -537,9 +532,9 @@ void Engine::processBlock(const float* samples, int numSamples) {
                 rawBpm = d.applyHysteresisAndCommit(rawBpm);
 
                 outputBpm = rawBpm;
-                bool alreadyLockedFast = (d.tempo.currentStableBpm > d.Impl::FAST_TEMPO_THRESHOLD);
+                bool alreadyLockedFast = (d.tempo.currentStableBpm > d.Impl::config.fastTempoThreshold);
                 
-                if (!alreadyLockedFast && rawBpm > d.Impl::FAST_TEMPO_THRESHOLD && d.tempo.highBpmConfirmationCount < 12) {
+                if (!alreadyLockedFast && rawBpm > d.Impl::config.fastTempoThreshold && d.tempo.highBpmConfirmationCount < 12) {
                     outputBpm *= 0.5;
                 }
             }
@@ -588,8 +583,11 @@ void Engine::updateTunableConfig(const Config& config) {
     setNoveltySmoothing(config.noveltySmoothing);
     setFluxCompression(config.fluxCompression);
     setHysteresisBlend(config.hysteresisBlend);
+    setFastTempoThreshold(config.fastTempoThreshold);
+    setSilenceTimeoutSec(config.silenceTimeoutSec);
+    setWarmupHops(config.warmupHops);
     
-    // uiSmoothing and VISUAL_DEADZONE are not set here as they are handled in the consumer application (CLI or WASM)
+    // uiSmoothing, VISUAL_DEADZONE, magneticSnapRange, and confThreshold are not set here as they are handled in the consumer application (CLI or WASM)
 }
 
 void Engine::setTargetResolution(NoteResolution resolution) {
@@ -639,6 +637,24 @@ void Engine::setHysteresisBlend(double blend) {
 }
 void Engine::setMagneticSnapRange(double range) {
     pImpl_->config.magneticSnapRange = range;
+}
+void Engine::setFastTempoThreshold(double value) {
+    pImpl_->config.fastTempoThreshold = value;
+}
+void Engine::setSilenceTimeoutSec(double value) {
+    pImpl_->config.silenceTimeoutSec = value;
+}
+void Engine::setWarmupHops(int value) {
+    pImpl_->config.warmupHops = value;
+}
+void Engine::setUiSmoothing(double alpha) {
+    pImpl_->config.uiSmoothing = alpha;
+}
+void Engine::setVisualDeadzone(double deadzone) {
+    pImpl_->config.VISUAL_DEADZONE = deadzone;
+}
+void Engine::setConfThreshold(double threshold) {
+    pImpl_->config.confThreshold = threshold;
 }
 
 void Engine::reset() {

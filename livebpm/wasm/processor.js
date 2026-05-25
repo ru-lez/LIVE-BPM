@@ -61,6 +61,12 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
                     else if (param === 'fluxCompression') this.engine.setFluxCompression(value);
                     else if (param === 'hysteresisBlend') this.engine.setHysteresisBlend(value);
                     else if (param === 'magneticSnapRange') this.engine.setMagneticSnapRange(value);
+                    else if (param === 'fastTempoThreshold') this.engine.setFastTempoThreshold(value);
+                    else if (param === 'silenceTimeoutSec') this.engine.setSilenceTimeoutSec(value);
+                    else if (param === 'warmupHops') this.engine.setWarmupHops(value);
+                    else if (param === 'uiSmoothing') this.engine.setUiSmoothing(value);
+                    else if (param === 'visualDeadzone') this.engine.setVisualDeadzone(value);
+                    else if (param === 'confThreshold') this.engine.setConfThreshold(value);
                 }
             } else if (event.data.type === 'reset') {
                 if (this.engine) {
