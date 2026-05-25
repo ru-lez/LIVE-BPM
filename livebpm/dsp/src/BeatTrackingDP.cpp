@@ -130,8 +130,7 @@ BeatTrackingResult BeatTrackingDP::track(
                 sumNovelty += novelty[idx];
             }
 
-            result.alignment =
-                sumNovelty / (beats.size() * maxNovelty);
+            result.alignment = sumNovelty / (static_cast<double>(beats.size()) * static_cast<double>(maxNovelty));
         }
 
         // Coverage: fraction of the time window covered by beats

@@ -161,7 +161,7 @@ struct Engine::Impl {
             8000.0f   // ~B8 upper bound
         );
 
-        filterBank.numSemitoneBands = static_cast<int>(filterBank.filterBank.size()) / fft.numBins;
+        filterBank.numSemitoneBands = static_cast<int>(filterBank.filterBank.size() / static_cast<size_t>(fft.numBins));
         filterBank.currentBandEnergies.resize(filterBank.numSemitoneBands, 0.0f);
         filterBank.previousBandEnergies.resize(filterBank.numSemitoneBands, 0.0f);
 
@@ -198,7 +198,7 @@ struct Engine::Impl {
     }
 
     bool hasEnoughDataForAnalysis() const {
-        return novelty.hopCounter >= fft.hopSize && ringBuffer.available() >= fft.fftSize;
+        return novelty.hopCounter >= fft.hopSize && ringBuffer.available() >= static_cast<size_t>(fft.fftSize);
     }
 
     void readNextWindowAndComputeFFT() {
@@ -379,7 +379,7 @@ struct Engine::Impl {
         return tempoResult.bpm;
     }
 
-    void applyAlternationHeuristics(double& currentBpm) {
+    double applyAlternationHeuristics(double currentBpm) {
         int noveltyLen = getNoveltyLength();
 
         // --- A. Analyse (Alternation Check) ---
@@ -443,9 +443,11 @@ struct Engine::Impl {
         } else {
             tempo.highBpmConfirmationCount = std::max(0, tempo.highBpmConfirmationCount - 1);
         }
+
+        return currentBpm;
     }
 
-    void applyHysteresisAndCommit(double& currentBpm) {
+    double applyHysteresisAndCommit(double currentBpm) {
         // --- C. COMMIT (Hysteresis/Escape Hatch) ---
         if (tempo.currentStableBpm == 0.0) {
             tempo.currentStableBpm = currentBpm;
@@ -484,6 +486,7 @@ struct Engine::Impl {
                 }
             }
         }
+        return currentBpm;
     }
 };
 
@@ -525,18 +528,13 @@ void Engine::processBlock(const float* samples, int numSamples) {
 
         if (rawBpm > 0) {
             double outputBpm = rawBpm;
-        /* DEBUG LOGGING
-            std::cout << "[DSP] Raw Detected: " << rawBpm 
-                      << " | Stable: " << d.tempo.currentStableBpm 
-                      << " | Ratio: " << d.tempo.smoothedAlternationRatio << "\n";
-        */
             
             // Immediately scale the detected pulse back to Master 1/4 Note Tempo
             rawBpm /= inputScale;
 
             if (d.config.useHeuristics) {
-                d.applyAlternationHeuristics(rawBpm);
-                d.applyHysteresisAndCommit(rawBpm);
+                rawBpm = d.applyAlternationHeuristics(rawBpm);
+                rawBpm = d.applyHysteresisAndCommit(rawBpm);
 
                 outputBpm = rawBpm;
                 bool alreadyLockedFast = (d.tempo.currentStableBpm > d.Impl::FAST_TEMPO_THRESHOLD);

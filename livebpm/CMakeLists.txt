@@ -6,9 +6,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Strict warnings
 if(MSVC)
-    add_compile_options(/W4)
+    set(LIVEBPM_WARNINGS /W4)
 else()
-    add_compile_options(-Wall -Wextra -Wpedantic)
+    set(LIVEBPM_WARNINGS -Wall -Wextra -Wpedantic)
 endif()
 
 # --- KissFFT (C library) ---
@@ -23,6 +23,10 @@ add_library(livebpm_dsp
     dsp/src/BeatTrackingDP.cpp
 )
 
+target_compile_options(livebpm_dsp PRIVATE
+    ${LIVEBPM_WARNINGS}
+)
+
 target_include_directories(livebpm_dsp PUBLIC
     dsp/include
     core/include
@@ -33,6 +37,10 @@ target_link_libraries(livebpm_dsp PUBLIC kissfft)
 # --- Core Library (Engine) ---
 add_library(livebpm_core
     core/src/Engine.cpp
+)
+
+target_compile_options(livebpm_core PRIVATE
+    ${LIVEBPM_WARNINGS}
 )
 
 target_include_directories(livebpm_core PUBLIC core/include)
@@ -56,6 +64,14 @@ add_executable(livebpm_tests
     tests/unit/test_TempoEstimation.cpp
 )
 
+target_compile_options(livebpm_tests PRIVATE
+    ${LIVEBPM_WARNINGS}
+)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR EMSCRIPTEN)
+    target_compile_options(livebpm_tests PRIVATE -Wno-c2y-extensions)
+endif()
+
 target_link_libraries(livebpm_tests PRIVATE livebpm_core
     Catch2::Catch2WithMain
 )
@@ -68,6 +84,7 @@ catch_discover_tests(livebpm_tests)
 
 # --- CLI ---
 add_executable(livebpm_cli cli/main.cpp)
+target_compile_options(livebpm_cli PRIVATE ${LIVEBPM_WARNINGS})
 target_link_libraries(livebpm_cli PRIVATE livebpm_core)
 target_include_directories(livebpm_cli PRIVATE extern/miniaudio)
 
@@ -80,6 +97,7 @@ endif()
 if (EMSCRIPTEN)
     add_executable(livebpm_wasm wasm/bridge.cpp)
     target_link_libraries(livebpm_wasm PRIVATE livebpm_core)
+    target_compile_options(livebpm_wasm PRIVATE ${LIVEBPM_WARNINGS})
 
     # Enable WebAssembly shared memory instructions for all targets
     target_compile_options(livebpm_wasm PRIVATE -matomics -mbulk-memory)

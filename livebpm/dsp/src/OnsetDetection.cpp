@@ -12,8 +12,8 @@ namespace livebpm { namespace dsp {
 
 // Helper to wrap a phase value (in radians) into the principal range [-PI, PI].
 static float princarg(float phase) {
-    while (phase <= -M_PI) phase += 2.0f * (float)M_PI;
-    while (phase > (float)M_PI) phase -= 2.0f * (float)M_PI;
+    while (phase <= -static_cast<float>(M_PI)) phase += 2.0f * static_cast<float>(M_PI);
+    while (phase > static_cast<float>(M_PI)) phase -= 2.0f * static_cast<float>(M_PI);
     return phase;
 }
 

@@ -1,4 +1,17 @@
+// Ignoring third-party libraries for -Wall -Wextra -Wpedantic
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wextra"
+#pragma GCC diagnostic ignored "-Wpedantic"
+#endif
+
 #include <emscripten/bind.h>
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+
 #include "livebpm/Engine.h"
 #include "livebpm/Presets.h"
 

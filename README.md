@@ -133,7 +133,8 @@ Audio
 
 ## Known Limitations
 * BPM of Legato instruments may take a few seconds to intially recognise (up to 4 seconds).
-* TODO. Manmohan, any ideas?
+* Complex rhythms (like 16th-note funk patterns) may still briefly trick the engine until hysteresis lock corrects it.
+* Note value switching flushes the DSP to prevent buffer maths errors. This means the engine will be temporarily unavailable (~0.25s or 50 hops) while it rebuilds the novelty curve.
 
 
 ## Authors
