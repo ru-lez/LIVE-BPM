@@ -15,7 +15,23 @@ public:
     Result getLatestResult() const;
     void reset();
 
+    void updateTunableConfig(const Config& config);
+
+    // Advanced Mode
     void setTargetResolution(NoteResolution resolution);
+    void setHeuristicsEnabled(bool setting);
+    void setOnsetSensitivity(double sensitivity);
+    void setComplexDomainWeight(double weight);
+    void setSilenceThreshold(double threshold);
+    void setMinBpm(double minBpm);
+    void setMaxBpm(double maxBpm);
+    void setDoubleTimeJumpThreshold(double threshold);
+    void setHalfTimeJumpThreshold(double threshold);
+    void setGatingAlpha(double alpha);
+    void setNoveltySmoothing(double smoothing);
+    void setFluxCompression(double compression);
+    void setHysteresisBlend(double blend);
+    void setMagneticSnapRange(double range);
 
     // Update all non-structural tunable parameters and reset the engine.
     // Structural fields (sampleRate, blockSize, fftOrder, analysisWindowSeconds)

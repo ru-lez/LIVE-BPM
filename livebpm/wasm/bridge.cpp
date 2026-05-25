@@ -1,6 +1,23 @@
+// Ignoring third-party libraries for -Wall -Wextra -Wpedantic
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wextra"
+#pragma GCC diagnostic ignored "-Wpedantic"
+#endif
+
 #include <emscripten/bind.h>
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+
 #include "livebpm/Engine.h"
+<<<<<<< HEAD
 #include "livebpm/InstrumentPresets.h"
+=======
+#include "livebpm/Presets.h"
+>>>>>>> vincent-wang/livebpm
 
 using namespace emscripten;
 
@@ -33,6 +50,32 @@ public:
         result.set("processingTimeMs", r.processingTimeMs);
         return result;
     }
+    
+    val loadPreset(std::string name) {
+        livebpm::Config c = livebpm::GetPreset(name);
+        
+        // Pass the config to the engine
+        engine_->updateTunableConfig(c);
+
+        val result = val::object();
+        result.set("heuristics", c.useHeuristics);
+        result.set("silenceThreshold", c.SILENCE_THRESHOLD);
+        result.set("onsetSensitivity", c.onsetSensitivity);
+        result.set("complexDomainWeight", c.complexDomainWeight);
+        result.set("uiSmoothing", c.uiSmoothing);
+        result.set("visualDeadzone", c.VISUAL_DEADZONE);
+        result.set("minBpm", c.minBpm);
+        result.set("maxBpm", c.maxBpm);
+        result.set("doubleTimeJumpThreshold", c.doubleTimeJumpThreshold);
+        result.set("halfTimeJumpThreshold", c.halfTimeJumpThreshold);
+        result.set("gatingAlpha", c.gatingAlpha);
+        result.set("noveltySmoothing", c.noveltySmoothing);
+        result.set("fluxCompression", c.fluxCompression);
+        result.set("hysteresisBlend", c.hysteresisBlend);
+        result.set("magneticSnapRange", c.magneticSnapRange);
+        
+        return result;
+    }
 
     void setTargetResolution(livebpm::NoteResolution res) {
         config_.targetResolution = res;
@@ -60,6 +103,7 @@ public:
         engine_->updateTunableConfig(config_);
     }
 
+<<<<<<< HEAD
     // Set a single named parameter and immediately apply it to the engine.
     // Parameter names match the fields in livebpm::Config.
     void setParam(const std::string& name, double value) {
@@ -96,6 +140,48 @@ public:
 
     void reset() { engine_->reset(); }
 
+=======
+    void setUseHeuristics(bool setting) {
+        engine_->setHeuristicsEnabled(setting);
+    }
+    void setOnsetSensitivity(double val) { 
+        engine_->setOnsetSensitivity(val);
+    }
+    void setComplexDomainWeight(double val) {
+        engine_->setComplexDomainWeight(val);
+    }
+    void setSilenceThreshold(double val) {
+        engine_->setSilenceThreshold(val);
+    }
+    void setMinBpm(double val) { 
+        engine_->setMinBpm(val); 
+    }
+    void setMaxBpm(double val) { 
+        engine_->setMaxBpm(val); 
+    }
+    void setDoubleTimeJumpThreshold(double val) { 
+        engine_->setDoubleTimeJumpThreshold(val); 
+    }
+    void setHalfTimeJumpThreshold(double val) { 
+        engine_->setHalfTimeJumpThreshold(val); 
+    }
+    void setGatingAlpha(double val) { 
+        engine_->setGatingAlpha(val); 
+    }
+    void setNoveltySmoothing(double val) { 
+        engine_->setNoveltySmoothing(val); 
+    }
+    void setFluxCompression(double val) { 
+        engine_->setFluxCompression(val); 
+    }
+    void setHysteresisBlend(double val) { 
+        engine_->setHysteresisBlend(val); 
+    }
+    void setMagneticSnapRange(double val) { 
+        engine_->setMagneticSnapRange(val); 
+    }
+
+>>>>>>> vincent-wang/livebpm
 private:
     std::unique_ptr<livebpm::Engine> engine_;
     livebpm::Config config_;
@@ -119,9 +205,31 @@ EMSCRIPTEN_BINDINGS(livebpm) {
         .function("hasValidEstimate",    &LiveBpmWasm::hasValidEstimate)
         .function("getResult",           &LiveBpmWasm::getResult)
         .function("setTargetResolution", &LiveBpmWasm::setTargetResolution)
+<<<<<<< HEAD
         .function("getVisualDeadzone",   &LiveBpmWasm::getVisualDeadzone)
         .function("setPreset",           &LiveBpmWasm::setPreset)
         .function("setParam",            &LiveBpmWasm::setParam)
         .function("getConfig",           &LiveBpmWasm::getConfig)
         .function("reset",               &LiveBpmWasm::reset);
 }
+=======
+        .function("getVisualDeadzone", &LiveBpmWasm::getVisualDeadzone)
+        .function("reset", &LiveBpmWasm::reset)
+
+        // Advanced Mode
+        .function("setUseHeuristics", &LiveBpmWasm::setUseHeuristics)
+        .function("setOnsetSensitivity", &LiveBpmWasm::setOnsetSensitivity)
+        .function("setComplexDomainWeight", &LiveBpmWasm::setComplexDomainWeight)
+        .function("setSilenceThreshold", &LiveBpmWasm::setSilenceThreshold)
+        .function("setMinBpm", &LiveBpmWasm::setMinBpm)
+        .function("setMaxBpm", &LiveBpmWasm::setMaxBpm)
+        .function("setDoubleTimeJumpThreshold", &LiveBpmWasm::setDoubleTimeJumpThreshold)
+        .function("setHalfTimeJumpThreshold", &LiveBpmWasm::setHalfTimeJumpThreshold)
+        .function("setGatingAlpha", &LiveBpmWasm::setGatingAlpha)
+        .function("setNoveltySmoothing", &LiveBpmWasm::setNoveltySmoothing)
+        .function("setFluxCompression", &LiveBpmWasm::setFluxCompression)
+        .function("setHysteresisBlend", &LiveBpmWasm::setHysteresisBlend)
+        .function("setMagneticSnapRange", &LiveBpmWasm::setMagneticSnapRange)
+        .function("loadPreset", &LiveBpmWasm::loadPreset);
+}
+>>>>>>> vincent-wang/livebpm

@@ -24,8 +24,17 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
 
             if (type === 'init') {
                 await this.initWasm(event.data.sampleRate, event.data.wasmBinary);
+<<<<<<< HEAD
 
             } else if (type === 'setResolution') {
+=======
+            } else if (event.data.type === 'loadPreset') {
+                if (this.engine) {
+                    const configValues = this.engine.loadPreset(event.data.preset);
+                    this.port.postMessage({ type: 'presetLoaded', data: configValues });
+                }
+            } else if (event.data.type === 'setResolution') {
+>>>>>>> vincent-wang/livebpm
                 if (this.engine) {
                     let resEnum;
                     if      (event.data.value === 1) resEnum = this.module.NoteResolution.HalfNote;
@@ -36,6 +45,7 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
                     else                             resEnum = this.module.NoteResolution.QuarterNote;
                     this.engine.setTargetResolution(resEnum);
                 }
+<<<<<<< HEAD
 
             } else if (type === 'setPreset') {
                 if (this.engine) {
@@ -47,6 +57,31 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
             } else if (type === 'setParam') {
                 if (this.engine) {
                     this.engine.setParam(event.data.name, event.data.value);
+=======
+            } else if (event.data.type === 'setHeuristics') {
+                if (this.engine) {
+                    this.engine.setUseHeuristics(event.data.enabled);
+                }
+            } else if (event.data.type === 'setParameter') {
+                const { param, value } = event.data;
+                if (this.engine) {
+                    if (param === 'silenceThreshold') this.engine.setSilenceThreshold(value);
+                    else if (param === 'onsetSensitivity') this.engine.setOnsetSensitivity(value);
+                    else if (param === 'complexDomainWeight') this.engine.setComplexDomainWeight(value);
+                    else if (param === 'minBpm') this.engine.setMinBpm(value);
+                    else if (param === 'maxBpm') this.engine.setMaxBpm(value);
+                    else if (param === 'doubleTimeJumpThreshold') this.engine.setDoubleTimeJumpThreshold(value);
+                    else if (param === 'halfTimeJumpThreshold') this.engine.setHalfTimeJumpThreshold(value);
+                    else if (param === 'gatingAlpha') this.engine.setGatingAlpha(value);
+                    else if (param === 'noveltySmoothing') this.engine.setNoveltySmoothing(value);
+                    else if (param === 'fluxCompression') this.engine.setFluxCompression(value);
+                    else if (param === 'hysteresisBlend') this.engine.setHysteresisBlend(value);
+                    else if (param === 'magneticSnapRange') this.engine.setMagneticSnapRange(value);
+                }
+            } else if (event.data.type === 'reset') {
+                if (this.engine) {
+                    this.engine.reset();
+>>>>>>> vincent-wang/livebpm
                 }
             }
         };

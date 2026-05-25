@@ -26,9 +26,29 @@ namespace livebpm {
 
         // Noise Gating threshold (Default: 0.03)
         double SILENCE_THRESHOLD = 0.03;
+        // Onset Sensitivity / Gating Offset (Default: 0.015)
+        double onsetSensitivity = 0.015;
+        // Complex Domain Weight [0.0 to 1.0] (Default: 0.4)
+        double complexDomainWeight = 0.4;
 
+        // UI Smoothing (Alpha)
+        double uiSmoothing = 0.15;
         // Visual Deadzone for display smoothing (Default: 0.1 BPM For Accuracy, increase to ~0.2 BPM to prevent jitter)
         double VISUAL_DEADZONE = 0.1;
+        // Magnetic Snapping
+        double magneticSnapRange = 0.15;
+
+        // How fast the dynamic gate threshold adapts to volume changes
+        double gatingAlpha = 0.1;
+        // EMA alpha for novelty curve (higher = more responsive, less smooth)
+        double noveltySmoothing = 0.4;
+        // Log1p lambda for dynamic range compression
+        double fluxCompression = 50.0;
+        // Stable-BPM EMA alpha (lower = stickier/resists drift)
+        double hysteresisBlend = 0.05;
+
+        // Whether to apply heuristics for fast tempo detection and octave error correction
+        bool useHeuristics = true; 
 
         // Target note resolution for tempo estimation (Default: Quarter Notes)
         NoteResolution targetResolution = NoteResolution::QuarterNote;

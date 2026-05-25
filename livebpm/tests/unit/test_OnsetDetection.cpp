@@ -79,7 +79,7 @@ TEST_CASE("OnsetDetection: buildSemitoneFilterBank generates correct dimensions"
     // Calculate expected number of bands based on 12 semitones per octave
     int expectedBands = static_cast<int>(std::round(12.0f * std::log2(maxFreq / minFreq)));
     
-    REQUIRE(bank.size() == expectedBands * numBins);
+    REQUIRE(bank.size() == static_cast<size_t>(expectedBands * numBins));
 
     // Check that filters are non-negative
     for (float weight : bank) {

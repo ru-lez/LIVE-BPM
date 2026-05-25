@@ -1,9 +1,22 @@
+// Ignoring third-party libraries for -Wall -Wextra -Wpedantic
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wextra"
+#pragma GCC diagnostic ignored "-Wpedantic"
+#endif
+
+#include "kiss_fft.h"
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 #include "livebpm/dsp/SpectralAnalysis.h"
-#include "kiss_fft.h"
 
 namespace livebpm {
 namespace dsp {

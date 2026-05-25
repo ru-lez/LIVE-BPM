@@ -161,7 +161,7 @@ struct Engine::Impl {
             8000.0f   // ~B8 upper bound
         );
 
-        filterBank.numSemitoneBands = static_cast<int>(filterBank.filterBank.size()) / fft.numBins;
+        filterBank.numSemitoneBands = static_cast<int>(filterBank.filterBank.size() / static_cast<size_t>(fft.numBins));
         filterBank.currentBandEnergies.resize(filterBank.numSemitoneBands, 0.0f);
         filterBank.previousBandEnergies.resize(filterBank.numSemitoneBands, 0.0f);
 
@@ -198,7 +198,7 @@ struct Engine::Impl {
     }
 
     bool hasEnoughDataForAnalysis() const {
-        return novelty.hopCounter >= fft.hopSize && ringBuffer.available() >= fft.fftSize;
+        return novelty.hopCounter >= fft.hopSize && ringBuffer.available() >= static_cast<size_t>(fft.fftSize);
     }
 
     void readNextWindowAndComputeFFT() {
@@ -248,19 +248,33 @@ struct Engine::Impl {
         );
 
         // ---- Adaptive gating - each stream against its own moving average ----
+<<<<<<< HEAD
         float semitoneThreshold = gating.semitoneFluxMovingAverage + config.gatingOffset;
+=======
+        float semitoneThreshold = gating.semitoneFluxMovingAverage + static_cast<float>(config.onsetSensitivity);
+>>>>>>> vincent-wang/livebpm
         float gatedSemitone = (semitoneFlux > semitoneThreshold)
             ? (semitoneFlux - gating.semitoneFluxMovingAverage)
             : 0.0f;
         gating.semitoneFluxMovingAverage =
+<<<<<<< HEAD
             config.gatingAlpha * semitoneFlux + (1.0f - config.gatingAlpha) * gating.semitoneFluxMovingAverage;
 
         float complexThreshold = gating.complexFluxMovingAverage + config.gatingOffset;
+=======
+            static_cast<float>(config.gatingAlpha) * semitoneFlux + (1.0f - static_cast<float>(config.gatingAlpha)) * gating.semitoneFluxMovingAverage;
+
+        float complexThreshold = gating.complexFluxMovingAverage + static_cast<float>(config.onsetSensitivity);
+>>>>>>> vincent-wang/livebpm
         float gatedComplex = (complexFlux > complexThreshold)
             ? (complexFlux - gating.complexFluxMovingAverage)
             : 0.0f;
         gating.complexFluxMovingAverage =
+<<<<<<< HEAD
             config.gatingAlpha * complexFlux + (1.0f - config.gatingAlpha) * gating.complexFluxMovingAverage;
+=======
+            static_cast<float>(config.gatingAlpha) * complexFlux + (1.0f - static_cast<float>(config.gatingAlpha)) * gating.complexFluxMovingAverage;
+>>>>>>> vincent-wang/livebpm
 
         // ---- Normalise complex stream to comparable scale ----
         // Semitone flux is bounded [0, 1]; complex domain isn't. Dividing by
@@ -275,15 +289,26 @@ struct Engine::Impl {
         // complex domain contributes legato/phase-onset information.
         // During warm-up, rely on semitone flux only since complex MA is unreliable.
         float combinedFlux;
+        float cdWeight = static_cast<float>(config.complexDomainWeight);
+        
         if (gating.hopsProcessed < WARMUP_HOPS) {
             combinedFlux = gatedSemitone;
         } else {
+<<<<<<< HEAD
             combinedFlux = config.semitoneFluxWeight * gatedSemitone
                          + (1.0f - config.semitoneFluxWeight) * normalisedComplex;
         }
 
         // Logarithmic compression
         return std::log1p(config.fluxCompression * combinedFlux);
+=======
+            // Dynamically balance the streams based on UI input
+            combinedFlux = (1.0f - cdWeight) * gatedSemitone + cdWeight * normalisedComplex;
+        }
+
+        // Logarithmic compression
+        return std::log1p(static_cast<float>(config.fluxCompression) * combinedFlux);
+>>>>>>> vincent-wang/livebpm
     }
 
     void updateSilenceAndGating(float rawNovelty) {
@@ -305,8 +330,15 @@ struct Engine::Impl {
         }
 
         // Apply a smoothing filter to round off jagged legato peaks
+<<<<<<< HEAD
         gating.noveltyMovingAverage = (1.0f - config.noveltySmoothing) * gating.noveltyMovingAverage
                                     + config.noveltySmoothing * rawNovelty;
+=======
+        gating.noveltyMovingAverage = 
+            (1.0f - static_cast<float>(config.noveltySmoothing)) * gating.noveltyMovingAverage + 
+            static_cast<float>(config.noveltySmoothing) * rawNovelty;
+
+>>>>>>> vincent-wang/livebpm
         float noveltyVal = gating.noveltyMovingAverage;
 
         // Store in novelty buffer
@@ -375,7 +407,7 @@ struct Engine::Impl {
         return tempoResult.bpm;
     }
 
-    void applyAlternationHeuristics(double& currentBpm) {
+    double applyAlternationHeuristics(double currentBpm) {
         int noveltyLen = getNoveltyLength();
 
         // --- A. Analyse (Alternation Check) ---
@@ -439,9 +471,11 @@ struct Engine::Impl {
         } else {
             tempo.highBpmConfirmationCount = std::max(0, tempo.highBpmConfirmationCount - 1);
         }
+
+        return currentBpm;
     }
 
-    void applyHysteresisAndCommit(double& currentBpm) {
+    double applyHysteresisAndCommit(double currentBpm) {
         // --- C. COMMIT (Hysteresis/Escape Hatch) ---
         if (tempo.currentStableBpm == 0.0) {
             tempo.currentStableBpm = currentBpm;
@@ -474,13 +508,18 @@ struct Engine::Impl {
                     tempo.currentStableBpm = currentBpm;
                 } else {
                     // Stiffen the glide so FFT window drift can't drag it down
+<<<<<<< HEAD
                     tempo.currentStableBpm = (1.0 - config.hysteresisBlend) * tempo.currentStableBpm
                                            + config.hysteresisBlend * currentBpm;
+=======
+                    tempo.currentStableBpm = (1.0 - config.hysteresisBlend) * tempo.currentStableBpm + config.hysteresisBlend * currentBpm;
+>>>>>>> vincent-wang/livebpm
                     // Assign the smoothed value back
                     currentBpm = tempo.currentStableBpm;
                 }
             }
         }
+        return currentBpm;
     }
 };
 
@@ -521,23 +560,21 @@ void Engine::processBlock(const float* samples, int numSamples) {
         double rawBpm = d.estimateRawTempo(inputScale, useSmartMixedMode, latestResult_.confidence);
 
         if (rawBpm > 0) {
-        /* DEBUG LOGGING
-            std::cout << "[DSP] Raw Detected: " << rawBpm 
-                      << " | Stable: " << d.tempo.currentStableBpm 
-                      << " | Ratio: " << d.tempo.smoothedAlternationRatio << "\n";
-        */
+            double outputBpm = rawBpm;
             
             // Immediately scale the detected pulse back to Master 1/4 Note Tempo
             rawBpm /= inputScale;
 
-            d.applyAlternationHeuristics(rawBpm);
-            d.applyHysteresisAndCommit(rawBpm);
+            if (d.config.useHeuristics) {
+                rawBpm = d.applyAlternationHeuristics(rawBpm);
+                rawBpm = d.applyHysteresisAndCommit(rawBpm);
 
-            double outputBpm = rawBpm;
-            bool alreadyLockedFast = (d.tempo.currentStableBpm > d.Impl::FAST_TEMPO_THRESHOLD);
-            
-            if (!alreadyLockedFast && rawBpm > d.Impl::FAST_TEMPO_THRESHOLD && d.tempo.highBpmConfirmationCount < 12) {
-                outputBpm *= 0.5;
+                outputBpm = rawBpm;
+                bool alreadyLockedFast = (d.tempo.currentStableBpm > d.Impl::FAST_TEMPO_THRESHOLD);
+                
+                if (!alreadyLockedFast && rawBpm > d.Impl::FAST_TEMPO_THRESHOLD && d.tempo.highBpmConfirmationCount < 12) {
+                    outputBpm *= 0.5;
+                }
             }
 
             // Set the beat tracker lag using the resolution BPM
@@ -567,9 +604,25 @@ void Engine::processBlock(const float* samples, int numSamples) {
 Result Engine::getLatestResult() const {
     return latestResult_;
 }
-
 double Engine::getVisualDeadzone() const {
     return pImpl_->config.VISUAL_DEADZONE;
+}
+
+void Engine::updateTunableConfig(const Config& config) {
+    setHeuristicsEnabled(config.useHeuristics);
+    setSilenceThreshold(config.SILENCE_THRESHOLD);
+    setOnsetSensitivity(config.onsetSensitivity);
+    setComplexDomainWeight(config.complexDomainWeight);
+    setMinBpm(config.minBpm);
+    setMaxBpm(config.maxBpm);
+    setDoubleTimeJumpThreshold(config.doubleTimeJumpThreshold);
+    setHalfTimeJumpThreshold(config.halfTimeJumpThreshold);
+    setGatingAlpha(config.gatingAlpha);
+    setNoveltySmoothing(config.noveltySmoothing);
+    setFluxCompression(config.fluxCompression);
+    setHysteresisBlend(config.hysteresisBlend);
+    
+    // uiSmoothing and VISUAL_DEADZONE are not set here as they are handled in the consumer application (CLI or WASM)
 }
 
 void Engine::setTargetResolution(NoteResolution resolution) {
@@ -578,6 +631,47 @@ void Engine::setTargetResolution(NoteResolution resolution) {
         
         reset(); // Flush the engine state to prevent weirdness when switching resolutions
     }
+}
+void Engine::setHeuristicsEnabled(bool setting) {
+    pImpl_->config.useHeuristics = setting;
+
+    reset(); // Flush the engine state to prevent weirdness when switching heuristics on/off
+}
+void Engine::setOnsetSensitivity(double sensitivity) { 
+    pImpl_->config.onsetSensitivity = sensitivity;
+}
+void Engine::setComplexDomainWeight(double weight) { 
+    pImpl_->config.complexDomainWeight = weight; 
+}
+void Engine::setSilenceThreshold(double threshold) { 
+    pImpl_->config.SILENCE_THRESHOLD = threshold; 
+}
+void Engine::setMinBpm(double minBpm) { 
+    pImpl_->config.minBpm = minBpm; 
+}
+void Engine::setMaxBpm(double maxBpm) { 
+    pImpl_->config.maxBpm = maxBpm; 
+}
+void Engine::setDoubleTimeJumpThreshold(double threshold) { 
+    pImpl_->config.doubleTimeJumpThreshold = threshold; 
+}
+void Engine::setHalfTimeJumpThreshold(double threshold) { 
+    pImpl_->config.halfTimeJumpThreshold = threshold; 
+}
+void Engine::setGatingAlpha(double alpha) { 
+    pImpl_->config.gatingAlpha = alpha; 
+}
+void Engine::setNoveltySmoothing(double smoothing) { 
+    pImpl_->config.noveltySmoothing = smoothing; 
+}
+void Engine::setFluxCompression(double compression) { 
+    pImpl_->config.fluxCompression = compression; 
+}
+void Engine::setHysteresisBlend(double blend) { 
+    pImpl_->config.hysteresisBlend = blend; 
+}
+void Engine::setMagneticSnapRange(double range) {
+    pImpl_->config.magneticSnapRange = range;
 }
 
 void Engine::reset() {
