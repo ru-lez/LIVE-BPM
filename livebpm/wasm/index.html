@@ -197,6 +197,12 @@
         #custom-tooltip.visible {
             opacity: 1;
         }
+        .tooltip-hint {
+            text-align: center;
+            font-size: 0.85rem;
+            color: #888; 
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
@@ -262,6 +268,8 @@
                     <button class="advanced-btn reset-btn" onclick="resetSettings()" title="Revert to default settings">Reset</button>
                 </div>
             </div>
+
+            <p class="tooltip-hint">Hover over any parameter label to view what it does.</p>
 
             <div class="param-section">
                 <h3>Onset Detection & Gating</h3>
