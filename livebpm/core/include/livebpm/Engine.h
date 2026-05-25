@@ -33,11 +33,6 @@ public:
     void setHysteresisBlend(double blend);
     void setMagneticSnapRange(double range);
 
-    // Update all non-structural tunable parameters and reset the engine.
-    // Structural fields (sampleRate, blockSize, fftOrder, analysisWindowSeconds)
-    // are ignored — those can only be set at construction time.
-    void updateTunableConfig(const Config& newConfig);
-
     double getVisualDeadzone() const;
 
 private:
