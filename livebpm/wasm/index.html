@@ -173,6 +173,30 @@
             color: #1a1a1a;
             border-color: #ff0000;
         }
+        label[data-tip] {
+        cursor: help;
+        }
+        #custom-tooltip {
+            position: fixed;
+            background-color: rgb(36, 36, 36);
+            color: #eee;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: inherit;
+            border: 1px solid #333;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            z-index: 9999;
+            max-width: 250px;
+            line-height: 1.4;
+            text-align: center;
+        }
+        #custom-tooltip.visible {
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -243,27 +267,39 @@
                 <h3>Onset Detection & Gating</h3>
                 <div class="param-grid">
                     <div class="param-group">
-                        <label>Noise Gate (Silence) <span id="silenceThresholdVal">0.030</span></label>
+                        <label data-tip="Sets the absolute volume floor. Increase this to stop background room noise or microphone hum from triggering false beats.">
+                            Noise Gate (Silence) <span id="silenceThresholdVal">0.030</span>
+                        </label>
                         <input type="range" id="silenceThreshold" min="0.0" max="0.1" step="0.005" value="0.03" oninput="updateParam('silenceThreshold', this.value)">
                     </div>
                     <div class="param-group">
-                        <label>Complex Domain Weight <span id="complexDomainWeightVal">0.40</span></label>
+                        <label data-tip="Balances detection methods. Higher values track smooth legato instruments (like flutes) better, lower values favour punchy percussive hits.">
+                            Complex Domain Weight <span id="complexDomainWeightVal">0.40</span>
+                        </label>
                         <input type="range" id="complexDomainWeight" min="0.0" max="1.0" step="0.05" value="0.4" oninput="updateParam('complexDomainWeight', this.value)">
                     </div>
                     <div class="param-group">
-                        <label>Onset Sensitivity <span id="onsetSensitivityVal">0.015</span></label>
+                        <label data-tip="Determines the minimum energy jump required to trigger a note. Lower values catch quiet taps but may increase false positives.">
+                            Onset Sensitivity <span id="onsetSensitivityVal">0.015</span>
+                        </label>
                         <input type="range" id="onsetSensitivity" min="0.001" max="0.1" step="0.001" value="0.015" oninput="updateParam('onsetSensitivity', this.value)">
                     </div>
                     <div class="param-group">
-                        <label>Gating Alpha (Adaptation) <span id="gatingAlphaVal">0.10</span></label>
+                        <label data-tip="Controls how fast the internal noise gate adapts to the musician naturally getting louder or softer over time.">
+                            Gating Alpha (Adaptation) <span id="gatingAlphaVal">0.10</span>
+                        </label>
                         <input type="range" id="gatingAlpha" min="0.01" max="0.5" step="0.01" value="0.1" oninput="updateParam('gatingAlpha', this.value)">
                     </div>
                     <div class="param-group">
-                        <label>Flux Compression (Log1p) <span id="fluxCompressionVal">50</span></label>
+                        <label data-tip="Flattens extreme volume differences, ensuring quiet notes and heavy accents are weighted more equally by the tracking engine">
+                            Flux Compression (Log1p) <span id="fluxCompressionVal">50</span>
+                        </label>
                         <input type="range" id="fluxCompression" min="10.0" max="100.0" step="1.0" value="50.0" oninput="updateParam('fluxCompression', this.value)">
                     </div>
                     <div class="param-group">
-                        <label>Novelty Smoothing <span id="noveltySmoothingVal">0.40</span></label>
+                        <label data-tip="Applies a moving average to the raw audio energy stream. Higher values reduce beat jitter but slightly delay the engine's reaction time.">
+                            Novelty Smoothing <span id="noveltySmoothingVal">0.40</span>
+                        </label>
                         <input type="range" id="noveltySmoothing" min="0.05" max="0.9" step="0.05" value="0.4" oninput="updateParam('noveltySmoothing', this.value)">
                     </div>
                 </div>
@@ -273,29 +309,39 @@
                 <h3>Tempo Engine & Hysteresis</h3>
                 <div class="param-grid">
                     <div class="param-group">
-                        <label>Target Minimum BPM <span id="minBpmVal">40</span></label>
+                        <label data-tip="The lowest tempo range the engine will search for.">
+                            Target Minimum BPM <span id="minBpmVal">40</span>
+                        </label>
                         <input type="range" id="minBpm" min="30.0" max="120.0" step="1.0" value="40.0" oninput="updateParam('minBpm', this.value)">
                     </div>
                     <div class="param-group">
-                        <label>Target Maximum BPM <span id="maxBpmVal">240</span></label>
+                        <label data-tip="The highest tempo range the engine will search for.">
+                            Target Maximum BPM <span id="maxBpmVal">240</span>
+                        </label>
                         <input type="range" id="maxBpm" min="120.0" max="480.0" step="1.0" value="240.0" oninput="updateParam('maxBpm', this.value)">
                     </div>
                     <div class="param-group">
-                        <label class="checkbox-label">
+                        <label class="checkbox-label" data-tip="Uses rhythmic pattern analysis to automatically defend against double-time and half-time tracking errors.">
                             Heuristics (Octave/Pattern correction)
                             <input type="checkbox" id="heuristicsToggle" checked onchange="toggleHeuristics(this.checked)">
                         </label>
                     </div>
                     <div class="param-group">
-                        <label>Hysteresis Blend (Stickiness) <span id="hysteresisBlendVal">0.05</span></label>
+                        <label data-tip="Determines how 'sticky' the current tempo is. Lower values resist drifting, higher values adapt to real tempo changes faster.">
+                            Hysteresis Blend (Stickiness) <span id="hysteresisBlendVal">0.05</span>
+                        </label>
                         <input type="range" id="hysteresisBlend" min="0.01" max="0.2" step="0.01" value="0.05" oninput="updateParam('hysteresisBlend', this.value)">
                     </div>
                     <div class="param-group">
-                        <label>Double-Time Jump Tolerance <span id="doubleTimeJumpThresholdVal">20</span></label>
+                        <label data-tip="The threshold required before the engine allows the BPM to suddenly double (e.g. jumping from 60 to 120).">
+                            Double-Time Jump Tolerance <span id="doubleTimeJumpThresholdVal">20</span>
+                        </label>
                         <input type="range" id="doubleTimeJumpThreshold" min="5.0" max="40.0" step="5.0" value="20.0" oninput="updateParam('doubleTimeJumpThreshold', this.value)">
                     </div>
                     <div class="param-group">
-                        <label>Half-Time Jump Tolerance <span id="halfTimeJumpThresholdVal">10</span></label>
+                        <label data-tip="The threshold required before the engine allows the BPM to suddenly halve (e.g. dropping from 120 to 60).">
+                            Half-Time Jump Tolerance <span id="halfTimeJumpThresholdVal">10</span>
+                        </label>
                         <input type="range" id="halfTimeJumpThreshold" min="5.0" max="30.0" step="5.0" value="10.0" oninput="updateParam('halfTimeJumpThreshold', this.value)">
                     </div>
                 </div>
@@ -305,15 +351,21 @@
                 <h3>Display Output</h3>
                 <div class="param-grid">
                     <div class="param-group">
-                        <label>UI Smoothing (Alpha) <span id="uiSmoothingVal">0.15</span></label>
+                        <label data-tip="Controls the visual transition speed. Lower values look fluid on screen but will lag behind sudden, drastic tempo shifts.">
+                            UI Smoothing (Alpha) <span id="uiSmoothingVal">0.15</span>
+                        </label>
                         <input type="range" id="uiSmoothing" min="0.01" max="0.5" step="0.01" value="0.15" oninput="updateParam('uiSmoothing', this.value)">
                     </div>
                     <div class="param-group">
-                        <label>Visual Deadzone (Drift filter) <span id="visualDeadzoneVal">0.1</span></label>
+                        <label data-tip="Filters out tiny algorithmic micro-fluctuations. Increase this to lock the display steady and stop it from jittering by fractions of a BPM.">
+                            Visual Deadzone (Drift filter) <span id="visualDeadzoneVal">0.1</span>
+                        </label>
                         <input type="range" id="visualDeadzone" min="0.0" max="5.0" step="0.1" value="0.1" oninput="updateParam('visualDeadzone', this.value)">
                     </div>
                     <div class="param-group">
-                        <label>Magnetic Snap Range <span id="magneticSnapRangeVal">0.15</span></label>
+                        <label data-tip="Automatically pulls decimal BPMs (like 127.85) to clean, readable values (128.0) to provide a better visual experience for live musicians.">
+                            Magnetic Snap Range <span id="magneticSnapRangeVal">0.15</span>
+                        </label>
                         <input type="range" id="magneticSnapRange" min="0.0" max="0.5" step="0.05" value="0.15" oninput="updateParam('magneticSnapRange', this.value)">
                     </div>
                 </div>
@@ -584,6 +636,52 @@
                 }
             }
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Create single tooltip element and inject it into body
+            const tooltip = document.createElement('div');
+            tooltip.id = 'custom-tooltip';
+            document.body.appendChild(tooltip);
+
+            // Find every element on the page that has a "data-tip" attribute
+            const targets = document.querySelectorAll('[data-tip]');
+            let timeoutId;
+
+            targets.forEach(target => {
+                // Wait 250ms before showing the tooltip
+                target.addEventListener('mouseenter', () => {
+                    timeoutId = setTimeout(() => {
+                        tooltip.textContent = target.getAttribute('data-tip');
+                        tooltip.classList.add('visible');
+                    }, 250);
+                });
+
+                // Track the mouse so the tooltip stays out of the way
+                target.addEventListener('mousemove', (e) => {
+                    // Offset by 15px down and right from the cursor tip
+                    let leftPosition = e.clientX + 15;
+                    let topPosition = e.clientY + 15;
+
+                    // Keep on screen if hovering near the right/bottom edge
+                    const tooltipRect = tooltip.getBoundingClientRect();
+                    if (leftPosition + tooltipRect.width > window.innerWidth) {
+                        leftPosition = e.clientX - tooltipRect.width - 15;
+                    }
+                    if (topPosition + tooltipRect.height > window.innerHeight) {
+                        topPosition = e.clientY - tooltipRect.height - 15;
+                    }
+
+                    tooltip.style.left = `${leftPosition}px`;
+                    tooltip.style.top = `${topPosition}px`;
+                });
+
+                // Clear timer and hide if the mouse leaves early
+                target.addEventListener('mouseleave', () => {
+                    clearTimeout(timeoutId);
+                    tooltip.classList.remove('visible');
+                });
+            });
+        });
 
         // Enable the button once the script is loaded
         UI.status.textContent = 'Ready. Press Start.';
