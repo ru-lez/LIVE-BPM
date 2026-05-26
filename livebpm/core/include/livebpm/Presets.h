@@ -107,14 +107,14 @@ namespace livebpm {
             c.uiSmoothing = 0.15;
             c.VISUAL_DEADZONE = 0.25;
             c.magneticSnapRange = 0.25;
-            c.minBpm = 30.0;
+            c.minBpm = 40.0;
             c.maxBpm = 200.0;
             c.doubleTimeJumpThreshold = 20.0;
             c.halfTimeJumpThreshold = 15.0;
             c.fastTempoThreshold = 130.0;
             c.silenceTimeoutSec = 2.0;
             c.warmupHops = 40;
-            c.confThreshold = 0.40;
+            c.confThreshold = 0.30;
             c.octaveMismatchTolerance = 200;
             c.hardResetThreshold = 15.0;
         } else if (name == "electricbass") {
@@ -129,7 +129,7 @@ namespace livebpm {
             c.uiSmoothing = 0.15;
             c.VISUAL_DEADZONE = 0.20;
             c.magneticSnapRange = 0.10;
-            c.minBpm = 40.0;
+            c.minBpm = 60.0;
             c.maxBpm = 200.0;
             c.doubleTimeJumpThreshold = 20.0;
             c.halfTimeJumpThreshold = 10.0;

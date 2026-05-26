@@ -230,6 +230,16 @@ Blends the previous tempo estimate into each new reading to dampen sudden jumps.
 - **Low:** Display resists all but the most confident changes — very stable but slow to follow a real tempo shift.
 - **High:** Adapts quickly to genuine tempo changes; more susceptible to momentary outliers shifting the reading.
 
+**Tempo Stubbornness (Octave Tolerance)** · default `100` · range `10 – 300`
+Determines how long the engine will ignore sudden half-time or double-time drops before deciding the tempo change is intentional.
+- **Low:** The engine is highly reactive. It will trust sudden octave shifts almost immediately, which is great for deliberate, drastic tempo changes but increases the risk of "bouncing" during highly syncopated drum fills or sparse bridges.
+- **High:** The engine is highly rigid. It protects the current groove through long, sparse sections (like an acoustic pre-chorus or ambient bridge), assuming any sudden octave drop is a temporary tracking error rather than a real tempo shift.
+
+**Snap Threshold (Hard Reset)** · default `20` · range `5 – 50`
+The BPM difference required to bypass the engine's visual smoothing. If a new tempo reading differs from the current display by more than this amount, the engine instantly snaps to the new BPM rather than smoothly gliding towards it.
+- **Low:** The display will bypass smoothing and instantly snap to almost any moderate tempo change. Highly responsive, but can make the visual output feel erratic and jumpy during standard human performance.
+- **High:** The engine relies heavily on its smoothing algorithm, forcing the display to slowly glide toward the new tempo even during drastic, intentional tempo shifts (e.g., a sudden jump from 90 to 140 BPM will take a few seconds to visually catch up).
+
 **Double-Time Jump Tolerance** · default `20` · range `5 – 40`
 Confidence delta required before the engine accepts a sudden doubling of BPM (e.g. 60 → 120).
 - **Low:** BPM can jump to double speed with little evidence (less resistant to double-time errors).

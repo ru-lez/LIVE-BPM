@@ -218,27 +218,27 @@
         </div>
 
         <div class="note-resolution">
-            <label data-tip="Auto-detects subdivisions and locks to master 1/4 BPM.">
+            <label data-tip="Auto-detects the most natural pulse and locks to master 1/4 tempo.">
                 <input type="radio" name="resolution" value="6" onchange="updateNoteResolution(this.value)"> 
                 Smart
             </label>
-            <label data-tip="Display BPM at half-time.">
+            <label data-tip="Tracks the tempo on a half-note pulse.">
                 <input type="radio" name="resolution" value="1" onchange="updateNoteResolution(this.value)"> 
                 1/2 Note
             </label>
-            <label data-tip="Standard BPM (quarter-note pulse).">
+            <label data-tip="Tracks the tempo on a standard quarter-note pulse (Default).">
                 <input type="radio" name="resolution" value="2" onchange="updateNoteResolution(this.value)" checked> 
                 1/4 Note
             </label>
-            <label data-tip="Detect and display at 8th-note frequency.">
+            <label data-tip="Tracks the tempo on an 8th-note pulse.">
                 <input type="radio" name="resolution" value="3" onchange="updateNoteResolution(this.value)"> 
                 1/8 Note
             </label>
-            <label data-tip="Display tempo based on triplets (3 per beat).">
+            <label data-tip="Tracks the tempo on an 8th-note triplet pulse (3 per beat).">
                 <input type="radio" name="resolution" value="4" onchange="updateNoteResolution(this.value)"> 
                 1/8 Note Triplet
             </label>
-            <label data-tip="Display at 16th-note frequency.">
+            <label data-tip="Tracks the tempo on a 16th-note pulse.">
                 <input type="radio" name="resolution" value="5" onchange="updateNoteResolution(this.value)"> 
                 1/16 Note
             </label>
