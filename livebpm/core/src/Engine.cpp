@@ -459,8 +459,8 @@ struct Engine::Impl {
             }
 
             if (isOctaveError) {
-                // If it insists on the octave for 30 frames, break the lock
-                if (tempo.octaveMismatchCount > 30) {
+                // If it insists on the octave, break the lock
+                if (tempo.octaveMismatchCount > config.octaveMismatchTolerance) {
                     tempo.currentStableBpm = currentBpm; 
                     tempo.octaveMismatchCount = 0;
                 } else {
@@ -470,7 +470,7 @@ struct Engine::Impl {
             } else {
                 tempo.octaveMismatchCount = 0; 
                 // Smoothing and Hard Resets
-                if (std::abs(currentBpm - tempo.currentStableBpm) > 20.0) {
+                if (std::abs(currentBpm - tempo.currentStableBpm) > config.hardResetThreshold) {
                     // Hard reset if it's a massive shift
                     tempo.currentStableBpm = currentBpm;
                 } else {
@@ -552,7 +552,7 @@ void Engine::processBlock(const float* samples, int numSamples) {
             result.confidence = 0.4 * dpResult.stability
                               + 0.4 * dpResult.alignment
                               + 0.2 * dpResult.coverage;
-            result.hasValidEstimate = (result.confidence > 0.2);
+            result.hasValidEstimate = (result.confidence >= getConfThreshold());
 
             auto end = std::chrono::high_resolution_clock::now();
             result.processingTimeMs =
@@ -568,6 +568,9 @@ Result Engine::getLatestResult() const {
 }
 double Engine::getVisualDeadzone() const {
     return pImpl_->config.VISUAL_DEADZONE;
+}
+double Engine::getConfThreshold() const {
+    return pImpl_->config.confThreshold;
 }
 
 void Engine::updateTunableConfig(const Config& config) {
@@ -586,6 +589,8 @@ void Engine::updateTunableConfig(const Config& config) {
     setFastTempoThreshold(config.fastTempoThreshold);
     setSilenceTimeoutSec(config.silenceTimeoutSec);
     setWarmupHops(config.warmupHops);
+    setOctaveMismatchTolerance(config.octaveMismatchTolerance);
+    setHardResetThreshold(config.hardResetThreshold);
     
     // uiSmoothing, VISUAL_DEADZONE, magneticSnapRange, and confThreshold are not set here as they are handled in the consumer application (CLI or WASM)
 }
@@ -655,6 +660,12 @@ void Engine::setVisualDeadzone(double deadzone) {
 }
 void Engine::setConfThreshold(double threshold) {
     pImpl_->config.confThreshold = threshold;
+}
+void Engine::setOctaveMismatchTolerance(int tolerance) {
+    pImpl_->config.octaveMismatchTolerance = tolerance;
+}
+void Engine::setHardResetThreshold(double threshold) {
+    pImpl_->config.hardResetThreshold = threshold;
 }
 
 void Engine::reset() {

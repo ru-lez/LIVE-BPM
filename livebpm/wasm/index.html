@@ -218,27 +218,27 @@
         </div>
 
         <div class="note-resolution">
-            <label data-tip="Folds 1/8 and 1/16 note energy into the main beat to track complex grooves">
+            <label data-tip="Auto-detects subdivisions and locks to master 1/4 BPM.">
                 <input type="radio" name="resolution" value="6" onchange="updateNoteResolution(this.value)"> 
                 Smart
             </label>
-            <label data-tip="Tracks half-speed pulses.">
+            <label data-tip="Display BPM at half-time.">
                 <input type="radio" name="resolution" value="1" onchange="updateNoteResolution(this.value)"> 
                 1/2 Note
             </label>
-            <label data-tip="Standard mode.">
+            <label data-tip="Standard BPM (quarter-note pulse).">
                 <input type="radio" name="resolution" value="2" onchange="updateNoteResolution(this.value)" checked> 
                 1/4 Note
             </label>
-            <label data-tip="Tracks double-speed pulses.">
+            <label data-tip="Detect and display at 8th-note frequency.">
                 <input type="radio" name="resolution" value="3" onchange="updateNoteResolution(this.value)"> 
                 1/8 Note
             </label>
-            <label data-tip="Tracks three pulses per beat.">
+            <label data-tip="Display tempo based on triplets (3 per beat).">
                 <input type="radio" name="resolution" value="4" onchange="updateNoteResolution(this.value)"> 
                 1/8 Note Triplet
             </label>
-            <label data-tip="Tracks quadruple-speed pulses.">
+            <label data-tip="Display at 16th-note frequency.">
                 <input type="radio" name="resolution" value="5" onchange="updateNoteResolution(this.value)"> 
                 1/16 Note
             </label>
@@ -347,6 +347,18 @@
                         <input type="range" id="hysteresisBlend" min="0.01" max="0.2" step="0.01" value="0.05" oninput="updateParam('hysteresisBlend', this.value)">
                     </div>
                     <div class="param-group">
+                        <label data-tip="Determines how long the engine will ignore sudden half-time or double-time drops before deciding the tempo change is intentional. Increase this for songs with long, sparse sections (like pre-choruses or bridges).">
+                            Tempo Stubbornness <span id="octaveMismatchToleranceVal">100</span>
+                        </label>
+                        <input type="range" id="octaveMismatchTolerance" min="10" max="300" step="10" value="100" oninput="updateParam('octaveMismatchTolerance', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label data-tip="If the tempo changes by more than this amount, the engine will instantly snap to the new BPM rather than smoothly gliding.">
+                            Snap Threshold <span id="hardResetThresholdVal">20</span>
+                        </label>
+                        <input type="range" id="hardResetThreshold" min="5" max="50" step="5" value="20" oninput="updateParam('hardResetThreshold', this.value)">
+                    </div>
+                    <div class="param-group">
                         <label data-tip="The threshold required before the engine allows the BPM to suddenly double (e.g. jumping from 60 to 120).">
                             Double-Time Jump Tolerance <span id="doubleTimeJumpThresholdVal">20</span>
                         </label>
@@ -422,7 +434,8 @@
         };
 
         const PARAM_DECIMALS = {
-            minBpm: 0, maxBpm: 0, doubleTimeJumpThreshold: 0, halfTimeJumpThreshold: 0, fluxCompression: 0, warmupHops: 0, fastTempoThreshold: 0,
+            minBpm: 0, maxBpm: 0, doubleTimeJumpThreshold: 0, halfTimeJumpThreshold: 0, fluxCompression: 0,
+            warmupHops: 0, fastTempoThreshold: 0, octaveMismatchTolerance: 0, hardResetThreshold: 0,
             visualDeadzone: 1, silenceTimeoutSec: 1,
             complexDomainWeight: 2, gatingAlpha: 2, noveltySmoothing: 2, hysteresisBlend: 2, uiSmoothing: 2,
             magneticSnapRange: 2, confThreshold: 2

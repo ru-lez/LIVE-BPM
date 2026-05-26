@@ -90,6 +90,8 @@ public:
         result.set("silenceTimeoutSec", c.silenceTimeoutSec);
         result.set("warmupHops", c.warmupHops);
         result.set("confThreshold", c.confThreshold);
+        result.set("octaveMismatchTolerance", c.octaveMismatchTolerance);
+        result.set("hardResetThreshold", c.hardResetThreshold);
         
         return result;
     }
@@ -159,6 +161,12 @@ public:
     void setConfThreshold(double val) {
         engine_->setConfThreshold(val);
     }
+    void setOctaveMismatchTolerance(int val) {
+        engine_->setOctaveMismatchTolerance(val);
+    }
+    void setHardResetThreshold(double val) {
+        engine_->setHardResetThreshold(val);
+    }
 
 private:
     std::unique_ptr<livebpm::Engine> engine_;
@@ -205,5 +213,7 @@ EMSCRIPTEN_BINDINGS(livebpm) {
         .function("setUiSmoothing", &LiveBpmWasm::setUiSmoothing)
         .function("setVisualDeadzone", &LiveBpmWasm::setVisualDeadzone)
         .function("setConfThreshold", &LiveBpmWasm::setConfThreshold)
+        .function("setOctaveMismatchTolerance", &LiveBpmWasm::setOctaveMismatchTolerance)
+        .function("setHardResetThreshold", &LiveBpmWasm::setHardResetThreshold)
         .function("loadPreset", &LiveBpmWasm::loadPreset);
 }

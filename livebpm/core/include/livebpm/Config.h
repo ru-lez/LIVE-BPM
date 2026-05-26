@@ -52,12 +52,17 @@ namespace livebpm {
         // Whether to apply heuristics for fast tempo detection and octave error correction
         bool useHeuristics = true; 
 
-        // BPM threshold above which fast-tempo heuristics and octave-correction
-        double fastTempoThreshold = 140.0;
         // Duration of continuous silence before the detector resets or suspends
         double silenceTimeoutSec = 2.0;
         // Number of analysis hops required before tempo estimation is considered
         int warmupHops = 50;
+
+        // BPM threshold above which fast-tempo heuristics and octave-correction
+        double fastTempoThreshold = 140.0;
+        // Hystersis tolerance before it breaks the lock
+        int octaveMismatchTolerance = 100;
+        // Tempo difference for instant snap
+        double hardResetThreshold = 20.0;
 
         // Target note resolution for tempo estimation (Default: Quarter Notes)
         NoteResolution targetResolution = NoteResolution::QuarterNote;

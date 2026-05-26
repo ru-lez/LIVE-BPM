@@ -12,7 +12,6 @@ public:
     ~Engine();
 
     void processBlock(const float* samples, int numSamples);
-    Result getLatestResult() const;
     void reset();
 
     void updateTunableConfig(const Config& config);
@@ -38,8 +37,12 @@ public:
     void setUiSmoothing(double alpha);
     void setVisualDeadzone(double deadzone);
     void setConfThreshold(double value);
+    void setOctaveMismatchTolerance(int tolerance);
+    void setHardResetThreshold(double threshold);
 
+    Result getLatestResult() const;
     double getVisualDeadzone() const;
+    double getConfThreshold() const;
 
 private:
     struct Impl;
