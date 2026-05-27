@@ -87,48 +87,119 @@ cd build
 ctest --output-on-failure
 ```
 
+## Dependencies
+* **KissFFT**: FFT processing (BSD licence)
+* **miniaudio**: Audio I/O (Public domain)
+* **Catch2**: Testing framework (BSL-1.0)
 
 ## Architecture
 ```text
 Audio
   |
   v
-[Input Filters]
-  |
-  v
 [RingBuffer]
   |
   v
-[FFT + Hann Window]
+[FFT + Hann Window] -> Magnitude + Phase
   |
-  +-- Magnitude ---------------------------------+
-  |                                              |
-  v                                              v
-[Semitone Filter Bank Flux]           [Complex Domain Distance]
-  |                                              |
-  +--------> [Adaptive Gating & Fusion] <--------+
-                                      |
-                                      v
-                             [Novelty Buffer] (4 seconds)
-                                      |
-            +-------------------------+-------------------------+
-            |                                                   |
-            v                                                   v
-   [FFT Autocorrelation]                               [Beat Tracking DP]
-     (Tempo Estimation)                                (Beat Alignment)
-            |                                                   |
-            +-------------------------+-------------------------+
-                                      |
-                                      v
-                           [Confidence Scoring]
-                           (Stability, Coverage)
+  +---------------------+----------------------+
+  |                                            |
+  v                                            v
+[Semitone Filter Bank Flux]          [Complex Domain Flux]
+  |                                            |
+  +----------------> [Adaptive Gating] <-------+
+                (per-stream moving averages)
+                               |
+                               v
+                      [Fusion + Log Compression]
+                               |
+                               v
+                    [Novelty Buffer] (rolling ~4s)
+                               |
+            +------------------+------------------+
+            |                                     |
+            v                                     v
+   [Tempo Estimation]                   [Beat Tracking DP]
+  (FFT Autocorrelation +              (Dynamic Programming for
+  biased peak picking)               beat positions/alignment)
+            |                                     |
+            +------------------+------------------+
+                               |
+                               v
+                    [Stability & Post-Processing]
+                    - Dynamic Tracking Window (+ lock timer)
+                    - Alternation Heuristics (gated when locked)
+                    - Asymmetric Hysteresis Veto
+                    - Final BPM Commit
+                               |
+                               v
+                        Final BPM + Confidence
 ```
 
+## Engine Overview
 
-## Dependencies
-* **KissFFT**: FFT processing (BSD licence)
-* **miniaudio**: Audio I/O (Public domain)
-* **Catch2**: Testing framework (BSL-1.0)
+```text
+/**
+ * Engine Overview: Real-Time BPM & Beat Tracking
+ * 
+ * This engine estimates tempo and beat alignment for live audio streams.
+ * It chops the incoming audio into overlapping FFT windows to build a novelty curve.
+ * Then, it feeds that data into a rolling history buffer by using periodicity and dynamic
+ * programming to lock onto the tempo.
+ *
+ * 
+ * How it Works
+ *
+ * - Getting the Novelty Curve (Onset Detection)
+ *   First, the FFT magnitudes and phases for each audio block are calculated. 
+ *   To find the notes, a dual-stream approach is used:
+ *     1. Semitone/Super Flux: Tracks energy shifts across log-spaced semitone bands.
+ *        It handles hard transients, like percussion.
+ *     2. Complex Domain Flux: Tracks both magnitude and phase. It's used to catch the
+ *        softer legato transitions (like vocals or bowed strings) that pure magnitude
+ *        methods usually miss.
+ *   Both streams are run through separate moving averages to create an adaptive gating threshold.
+ *   Then, they are fused together and a logarithmic compression is applied to get the
+ *   final gated novelty curve.
+ *
+ * - Getting the Right Tempo
+ *   The periodic structure of the novelty buffer is analysed to find the main pulse.
+ *   The search window is dynamically scaled depending on the target note resolution.
+ *   (e.g. 16th notes vs half notes)
+ *
+ *   Once a stable tempo is locked, a Dynamic Tracking Window constrains the estimator's
+ *   search range to ±X% around the current stable BPM. This dramatically reduces
+ *   accidental half-time and double-time jumps. A lock timer combined with a
+ *   low-confidence streak counter makes the window tolerant of short sparse or
+ *   legato passages without shattering the lock.
+ *
+ * - Stabilising Readings (Post-Processing & Hysteresis)
+ *   Instead of relying purely on the raw tempo estimate, the engine implements heuristics
+ *   and hysteresis to prevent erratic jumps, especially in challenging scenarios like
+ *   fast tempos or weak signals.
+ *     1. Heuristics: The engine looks for strumming or tapping patterns by analysing
+ *        amplitude peaks. It compares even/odd peak ratios to make educated guesses to
+ *        prevent accidental double-time BPM readings. Heuristics are automatically
+ *        disabled once the dynamic window is locked.
+ *     2. Hysteresis Lock: The system resists sudden BPM changes based on its history.
+ *        An asymmetric veto now strictly blocks half-time candidates while still
+ *        allowing legitimate double-time readings, which isimportant for dense percussion.
+ *        If the audio signal is muddy or ambiguous, the engine holds onto the last
+ *        stable BPM instead of jumping to half-time or double-time.
+ * 
+ * - UI Smoothing (WASM & CLI Integration)
+ *   Due to the core engine designed to output raw precision, the CLI and WASM front-ends
+ *   implement smoothing layers to prevent jittery displays and to enhance readability.
+ *     1. Magnetic Snapping: BPM readings that are within close thresholds of close numbers
+ *        are snapped to those numbers. (e.g. 127.9 BPM would snap to 128 BPM)
+ *     2. Confidence Gating: The BPM display is only updated when the engine has a high
+ *        confidence reading, preventing erratic jumps when the signal is weak or ambiguous.
+ *   Ensuring these smoothing layers are implemented at the front-end layer allows the 
+ *   core engine to remain 100% analytical and precise, while the user interfaces 
+ *   (CLI and WASM) can focus on readability and usability.
+ * 
+ */
+ ```
 
 
 ## Target Note Resolution
@@ -165,31 +236,21 @@ The engine assumes it is hearing four rapid pulses for every single beat.
 
 ## Advanced Parameters
 
-The browser UI exposes an **Advanced** panel with fine-grained controls over the detection engine. Parameters are grouped into three sections.
+The browser UI exposes an **Advanced** panel with fine-grained controls over the detection engine. Parameters are grouped into four logical sections that follow the signal flow of the engine.
 
 ---
 
-### Onset Detection & Gating
+### Onset Detection
 
-**Noise Gate (Silence)** · default `0.030` · range `0.0 – 0.1`
-Sets the absolute volume floor below which all audio is ignored.
-- **Low:** Picks up very quiet sounds but risks triggering on background hum or room noise.
-- **High:** Silences ambient noise; may miss soft notes or light touches.
+**Onset Sensitivity** · default `0.015` · range `0.005 – 0.1`
+The minimum energy jump required to register a beat onset.
+- **Low:** Catches quiet or subtle notes; may increase false positives in noisy environments.
+- **High:** Only reacts to strong, clear attacks; may miss soft or lightly played notes.
 
 **Complex Domain Weight** · default `0.40` · range `0.0 – 1.0`
 Balances two onset detection methods: spectral flux (percussive) vs. complex domain distance (tonal).
 - **Low:** Favours punchy, percussive attacks (drums, cajón, plucked strings).
 - **High:** Tracks smooth, legato instruments (flute, bowed strings) more accurately.
-
-**Onset Sensitivity** · default `0.015` · range `0.001 – 0.1`
-The minimum energy jump required to register a beat onset.
-- **Low:** Catches quiet or subtle notes; may increase false positives in noisy environments.
-- **High:** Only reacts to strong, clear attacks; may miss soft or lightly played notes.
-
-**Gating Alpha (Adaptation)** · default `0.10` · range `0.01 – 0.5`
-How quickly the noise gate adapts when the musician's overall volume changes.
-- **Low:** Gate adjusts slowly — stable against sudden spikes but lags behind gradual crescendos.
-- **High:** Gate adapts immediately to volume changes — more responsive but potentially jittery.
 
 **Flux Compression (Log1p)** · default `50` · range `10 – 100`
 Compresses the dynamic range of the audio energy signal before it reaches the tracker.
@@ -201,6 +262,20 @@ Moving average applied to the raw beat-energy stream.
 - **Low:** Faster reaction to beat changes; may jitter under unsteady or rubato playing.
 - **High:** Smoother, more stable output with a slight delay when tempo shifts suddenly.
 
+---
+
+### Noise & Adaptive Gating
+
+**Noise Gate (Silence)** · default `0.030` · range `0.0 – 0.1`
+Sets the absolute volume floor below which all audio is ignored.
+- **Low:** Picks up very quiet sounds but risks triggering on background hum or room noise.
+- **High:** Silences ambient noise; may miss soft notes or light touches.
+
+**Gating Alpha (Adaptation)** · default `0.10` · range `0.01 – 0.5`
+How quickly the noise gate adapts when the musician's overall volume changes.
+- **Low:** Gate adjusts slowly — stable against sudden spikes but lags behind gradual crescendos.
+- **High:** Gate adapts immediately to volume changes — more responsive but potentially jittery.
+
 **Silence Timeout** · default `2.0` · range `0.5 – 5.0`
 Duration of continuous silence (in seconds) required before the engine completely flushes its rolling history buffer and resets.
 - **Low:** Flushes the engine almost immediately during brief pauses, requiring it to start from scratch when playing resumes.
@@ -208,7 +283,22 @@ Duration of continuous silence (in seconds) required before the engine completel
 
 ---
 
-### Tempo Engine & Hysteresis
+### Tempo Tracking & Locking
+
+**Heuristics (Octave/Pattern correction)** · default `On`
+Uses rhythmic pattern analysis to guard against double-time and half-time tracking errors.
+- **Off:** Raw tempo estimate is used with no octave correction; may report 2× or ½× the true BPM.
+- **On:** Automatically corrects common octave errors using pattern heuristics.
+
+**Dynamic Window Size** · default `0.40` · range `0.10 – 1.00`
+Once a stable tempo is locked, restricts the estimator’s search range to ±X% around the current BPM.
+- **Low:** Extremely narrow window — highly resistant to half/double-time errors.
+- **High:** Wider window — more flexible but allows more risk of octave jumps.
+
+**Shatter Threshold** · default `0.70` · range `0.50 – 0.90`
+Confidence level below which the dynamic window is temporarily opened again.
+- **Low:** Window stays locked even during uncertain passages (maximum stability).
+- **High:** Window shatters more easily on brief dips in confidence (more responsive).
 
 **Target Minimum BPM** · default `40` · range `30 – 120`
 Lower bound of the tempo search window.
@@ -220,45 +310,40 @@ Upper bound of the tempo search window.
 - **Low:** Caps detection to moderate tempos; useful to avoid false double-time readings.
 - **High:** Allows detection of very fast tempos (fast electronic music, drum rolls).
 
-**Heuristics (Octave/Pattern correction)** · default `On`
-Uses rhythmic pattern analysis to guard against double-time and half-time tracking errors.
-- **Off:** Raw tempo estimate is used with no octave correction; may report 2× or ½× the true BPM.
-- **On:** Automatically corrects common octave errors using pattern heuristics.
-
 **Hysteresis Blend (Stickiness)** · default `0.05` · range `0.01 – 0.2`
 Blends the previous tempo estimate into each new reading to dampen sudden jumps.
 - **Low:** Display resists all but the most confident changes — very stable but slow to follow a real tempo shift.
 - **High:** Adapts quickly to genuine tempo changes; more susceptible to momentary outliers shifting the reading.
 
-**Tempo Stubbornness (Octave Tolerance)** · default `100` · range `10 – 300`
+**Octave Lock Tolerance** · default `100` · range `10 – 300`
 Determines how long the engine will ignore sudden half-time or double-time drops before deciding the tempo change is intentional.
-- **Low:** The engine is highly reactive. It will trust sudden octave shifts almost immediately, which is great for deliberate, drastic tempo changes but increases the risk of "bouncing" during highly syncopated drum fills or sparse bridges.
-- **High:** The engine is highly rigid. It protects the current groove through long, sparse sections (like an acoustic pre-chorus or ambient bridge), assuming any sudden octave drop is a temporary tracking error rather than a real tempo shift.
-
-**Snap Threshold (Hard Reset)** · default `20` · range `5 – 50`
-The BPM difference required to bypass the engine's visual smoothing. If a new tempo reading differs from the current display by more than this amount, the engine instantly snaps to the new BPM rather than smoothly gliding towards it.
-- **Low:** The display will bypass smoothing and instantly snap to almost any moderate tempo change. Highly responsive, but can make the visual output feel erratic and jumpy during standard human performance.
-- **High:** The engine relies heavily on its smoothing algorithm, forcing the display to slowly glide toward the new tempo even during drastic, intentional tempo shifts (e.g., a sudden jump from 90 to 140 BPM will take a few seconds to visually catch up).
-
-**Double-Time Jump Tolerance** · default `20` · range `5 – 40`
-Confidence delta required before the engine accepts a sudden doubling of BPM (e.g. 60 → 120).
-- **Low:** BPM can jump to double speed with little evidence (less resistant to double-time errors).
-- **High:** Engine demands a very strong signal before accepting a 2× jump (more resistant to double-time errors).
-
-**Half-Time Jump Tolerance** · default `10` · range `5 – 30`
-Confidence delta required before the engine accepts a sudden halving of BPM (e.g. 120 → 60).
-- **Low:** BPM can drop to half speed with little evidence (less resistant to half-time errors).
-- **High:** Engine demands a very strong signal before accepting a ½× drop (more resistant to half-time errors).
-
-**Warmup Hops** · default `50` · range `10 – 250`
-The minimum amount of audio history the engine must silently collect before it turns on the tempo estimator. 
-- **Low:** Outputs a BPM almost instantly (e.g., ~0.2 seconds), but the initial reading may be erratic as the buffer lacks data.
-- **High:** Forces the engine to wait and accumulate a mathematically solid pattern (e.g., over 2 seconds), resulting in a highly accurate but delayed first reading.
+- **Low:** The engine is highly reactive. It will trust sudden octave shifts almost immediately.
+- **High:** The engine is highly rigid. It protects the current groove through long, sparse sections (like an acoustic pre-chorus or ambient bridge).
 
 **Fast Tempo Threshold** · default `140.0` · range `100.0 – 200.0`
 The BPM boundary where the engine's heuristics automatically activate to aggressively scan for alternating "strum-tap" patterns.
-- **Low:** Starts penalising double-time readings at moderately slow speeds. May accidentally halve the tempo of genuinely fast, aggressive playing.
-- **High:** Allows the engine to freely track fast tempos without heuristic interference, but increases the risk of double-time octave errors.
+- **Low:** Starts penalising double-time readings at moderately slow speeds.
+- **High:** Allows the engine to freely track fast tempos without heuristic interference.
+
+**Double-Time Jump Tolerance** · default `20` · range `5 – 40`
+Confidence delta required before the engine accepts a sudden doubling of BPM (e.g. 60 → 120).
+- **Low:** BPM can jump to double speed with little evidence.
+- **High:** Engine demands a very strong signal before accepting a 2× jump.
+
+**Half-Time Jump Tolerance** · default `10` · range `5 – 30`
+Confidence delta required before the engine accepts a sudden halving of BPM (e.g. 120 → 60).
+- **Low:** BPM can drop to half speed with little evidence.
+- **High:** Engine demands a very strong signal before accepting a ½× drop.
+
+**Hard Reset Threshold** · default `20` · range `5 – 50`
+The BPM difference required to bypass the engine's visual smoothing.
+- **Low:** The display will instantly snap to almost any moderate tempo change.
+- **High:** The engine relies heavily on smoothing, forcing the display to glide slowly even during intentional tempo shifts.
+
+**Warmup Hops** · default `50` · range `10 – 250`
+The minimum amount of audio history the engine must silently collect before it turns on the tempo estimator.
+- **Low:** Outputs a BPM almost instantly, but the initial reading may be erratic.
+- **High:** Forces the engine to wait and accumulate a mathematically solid pattern.
 
 ---
 
@@ -279,10 +364,10 @@ Snaps the displayed BPM to the nearest whole number when within this range.
 - **Low (0):** Shows the raw decimal BPM (e.g. 127.85).
 - **High:** Snaps aggressively over a wider range (e.g. 127.4 rounds to 127), keeping the display clean for live musicians.
 
-**Confidence Threshold** · default `0.45` · range `0.0 – 1.0`
+**Confidence Threshold** · default `0.50` · range `0.0 – 1.0`
 The minimum dynamic programming score (based on alignment, stability, and coverage) required before the engine sends an updated BPM to the visual display.
 - **Low:** The UI updates constantly even if the audio is messy, ambiguous, or pure background noise.
-- **High:** The UI only updates when the rhythmic pulse is mathematically undeniable, perfectly stable but may visibly freeze during complex fills or muddy audio.
+- **High:** The UI only updates when the rhythmic pulse is mathematically undeniable.
 
 ---
 

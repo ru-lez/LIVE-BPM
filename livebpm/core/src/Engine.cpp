@@ -10,7 +10,7 @@
  * How it Works
  *
  * - Getting the Novelty Curve (Onset Detection)
- *   First, the FFT magnitues and phases for each audio block are calculated. 
+ *   First, the FFT magnitudes and phases for each audio block are calculated. 
  *   To find the notes, a dual-stream approach is used:
  *     1. Semitone/Super Flux: Tracks energy shifts across log-spaced semitone bands.
  *        It handles hard transients, like percussion.
@@ -26,16 +26,25 @@
  *   The search window is dynamically scaled depending on the target note resolution.
  *   (e.g. 16th notes vs half notes)
  *
- * - Stablising Readings (Post-Processing & Hysteresis)
+ *   Once a stable tempo is locked, a Dynamic Tracking Window constrains the estimator's
+ *   search range to ±X% around the current stable BPM. This dramatically reduces
+ *   accidental half-time and double-time jumps. A lock timer combined with a
+ *   low-confidence streak counter makes the window tolerant of short sparse or
+ *   legato passages without shattering the lock.
+ *
+ * - Stabilising Readings (Post-Processing & Hysteresis)
  *   Instead of relying purely on the raw tempo estimate, the engine implements heuristics
  *   and hysteresis to prevent erratic jumps, especially in challenging scenarios like
  *   fast tempos or weak signals.
  *     1. Heuristics: The engine looks for strumming or tapping patterns by analysing
  *        amplitude peaks. It compares even/odd peak ratios to make educated guesses to
- *        prevent accidental double-time BPM readings.
- *     2. Hysteresis Lock: Implemented where the system resists sudden BPM changes based
- *        on its history. If the audio signal is muddy or ambiguous, the engine holds onto
- *        the last stable BPM instead of jumping to half-time or double-time.
+ *        prevent accidental double-time BPM readings. Heuristics are automatically
+ *        disabled once the dynamic window is locked.
+ *     2. Hysteresis Lock: The system resists sudden BPM changes based on its history.
+ *        An asymmetric veto now strictly blocks half-time candidates while still
+ *        allowing legitimate double-time readings, which isimportant for dense percussion.
+ *        If the audio signal is muddy or ambiguous, the engine holds onto the last
+ *        stable BPM instead of jumping to half-time or double-time.
  * 
  * - UI Smoothing (WASM & CLI Integration)
  *   Due to the core engine designed to output raw precision, the CLI and WASM front-ends
@@ -121,6 +130,9 @@ struct Engine::Impl {
         int octaveMismatchCount = 0;
         int highBpmConfirmationCount = 0;
         int consecutiveSilenceHops = 0;
+        int windowLockTimer = 0;
+        bool isWindowLocked = false;
+        int lowConfidenceStreak = 0;
     } tempo;
 
     dsp::RingBuffer<float> ringBuffer;
@@ -177,6 +189,7 @@ struct Engine::Impl {
         tempo.highBpmConfirmationCount = 0;
         tempo.smoothedAlternationRatio = 1.0f;
         tempo.consecutiveSilenceHops = 0;
+        tempo.lowConfidenceStreak = 0;
 
         // Clear gating moving averages
         gating.hopsProcessed = 0;
@@ -353,12 +366,42 @@ struct Engine::Impl {
         return std::min(novelty.writePos, novelty.maxLength);
     }
 
-    double estimateRawTempo(float inputScale, bool useSmartMixedMode, double& outConfidence) {
+    double estimateRawTempo(float inputScale, bool useSmartMixedMode, double previousConfidence) {
         int noveltyLen = getNoveltyLength();
         
+        double currentMinBpm = config.minBpm;
+        double currentMaxBpm = config.maxBpm;
+
         // Dynamic Window Shift
-        double currentMinBpm = config.minBpm * inputScale;
-        double currentMaxBpm = config.maxBpm * inputScale;
+        if (tempo.isWindowLocked && tempo.currentStableBpm > 0.0) {
+            double dynamicMin = tempo.currentStableBpm * (1.0 - config.dynamicWindowPercent);
+            double dynamicMax = tempo.currentStableBpm * (1.0 + config.dynamicWindowPercent);
+            
+            currentMinBpm = std::max(config.minBpm, dynamicMin);
+            currentMaxBpm = std::min(config.maxBpm, dynamicMax);
+        }
+
+        // Lock management / shatter logic
+        if (tempo.currentStableBpm > 0.0 && previousConfidence >= config.shatterConfidenceThreshold) {
+            tempo.windowLockTimer++;
+            tempo.lowConfidenceStreak = 0;
+
+            if (tempo.windowLockTimer > 300) {
+                tempo.isWindowLocked = true;
+            }
+        } else {
+            tempo.lowConfidenceStreak++;
+            tempo.windowLockTimer = 0;
+
+            // Only shatter after sustained low confidence
+            if (tempo.lowConfidenceStreak > 30) {
+                tempo.isWindowLocked = false;
+            }
+        }
+
+        // Resolution Scaling
+        currentMinBpm *= inputScale;
+        currentMaxBpm *= inputScale;
 
         // Scale the center bias so the estimator doesn't drag subdivisions back to 1/4 notes
         double trackingBpm = (tempo.currentStableBpm > 0.0) ? tempo.currentStableBpm : 100.0;
@@ -367,14 +410,25 @@ struct Engine::Impl {
         auto tempoResult = tempoEstimator.estimate(
             novelty.noveltyBuffer.data(), noveltyLen,
             fft.featureRate, currentMinBpm, currentMaxBpm,
-            scaledTrackingBpm, outConfidence,
+            scaledTrackingBpm, previousConfidence,
             useSmartMixedMode
         );
+        
+        // Breakthrough Logic Defense
+        if (tempo.isWindowLocked) {
+            if (tempoResult.bpm > 0.0 && (tempoResult.bpm < currentMinBpm || tempoResult.bpm > currentMaxBpm)) {
+                tempoResult.bpm = scaledTrackingBpm;
+            }
+        }
         
         return tempoResult.bpm;
     }
 
     double applyAlternationHeuristics(double currentBpm) {
+        if (tempo.isWindowLocked) {
+            return currentBpm; 
+        }
+
         int noveltyLen = getNoveltyLength();
 
         // --- A. Analyse (Alternation Check) ---
@@ -442,7 +496,17 @@ struct Engine::Impl {
         return currentBpm;
     }
 
-    double applyHysteresisAndCommit(double currentBpm) {
+        double applyHysteresisAndCommit(double currentBpm) {
+        // Strict veto when locked
+        // When the dynamic window is locked, never allow half/double-time jumps even if the estimator or alternation heuristics suggest it
+        if (tempo.isWindowLocked && tempo.currentStableBpm > 10.0) {
+            double ratio = currentBpm / tempo.currentStableBpm;
+            if (std::abs(ratio - 2.0) < 0.25 || std::abs(ratio - 0.5) < 0.25) {
+                tempo.octaveMismatchCount = 0; // reset counter
+                return tempo.currentStableBpm; // force clamp
+            }
+        }
+
         // --- C. COMMIT (Hysteresis/Escape Hatch) ---
         if (tempo.currentStableBpm == 0.0) {
             tempo.currentStableBpm = currentBpm;
@@ -528,13 +592,15 @@ void Engine::processBlock(const float* samples, int numSamples) {
             rawBpm /= inputScale;
 
             if (d.config.useHeuristics) {
-                rawBpm = d.applyAlternationHeuristics(rawBpm);
+                if (!d.tempo.isWindowLocked) {
+                    rawBpm = d.applyAlternationHeuristics(rawBpm);
+                }
                 rawBpm = d.applyHysteresisAndCommit(rawBpm);
 
                 outputBpm = rawBpm;
-                bool alreadyLockedFast = (d.tempo.currentStableBpm > d.Impl::config.fastTempoThreshold);
+                bool alreadyLockedFast = (d.tempo.currentStableBpm > d.config.fastTempoThreshold);
                 
-                if (!alreadyLockedFast && rawBpm > d.Impl::config.fastTempoThreshold && d.tempo.highBpmConfirmationCount < 12) {
+                if (!alreadyLockedFast && rawBpm > d.config.fastTempoThreshold && d.tempo.highBpmConfirmationCount < 12) {
                     outputBpm *= 0.5;
                 }
             }
@@ -666,6 +732,12 @@ void Engine::setOctaveMismatchTolerance(int tolerance) {
 }
 void Engine::setHardResetThreshold(double threshold) {
     pImpl_->config.hardResetThreshold = threshold;
+}
+void Engine::setDynamicWindowPercent(double percent) {
+    pImpl_->config.dynamicWindowPercent = percent;
+}
+void Engine::setShatterConfidenceThreshold(double threshold) {
+    pImpl_->config.shatterConfidenceThreshold = threshold;
 }
 
 void Engine::reset() {

@@ -39,6 +39,8 @@ public:
     void setConfThreshold(double value);
     void setOctaveMismatchTolerance(int tolerance);
     void setHardResetThreshold(double threshold);
+    void setDynamicWindowPercent(double percent);
+    void setShatterConfidenceThreshold(double threshold);
 
     Result getLatestResult() const;
     double getVisualDeadzone() const;

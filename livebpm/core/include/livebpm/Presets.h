@@ -26,9 +26,11 @@ namespace livebpm {
             c.fastTempoThreshold = 130.0; 
             c.silenceTimeoutSec = 1.5;
             c.warmupHops = 80;
-            c.confThreshold = 0.45;
+            c.confThreshold = 0.60;
             c.octaveMismatchTolerance = 100;
             c.hardResetThreshold = 25.0;
+            c.dynamicWindowPercent = 0.30;
+            c.shatterConfidenceThreshold = 0.70;
         } else if (name == "guitar") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.03;
@@ -48,9 +50,11 @@ namespace livebpm {
             c.fastTempoThreshold = 150.0;
             c.silenceTimeoutSec = 2.0;
             c.warmupHops = 40;
-            c.confThreshold = 0.50;
+            c.confThreshold = 0.55;
             c.octaveMismatchTolerance = 60;
             c.hardResetThreshold = 20.0;
+            c.dynamicWindowPercent = 0.40;
+            c.shatterConfidenceThreshold = 0.75;
         } else if (name == "electricguitar") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.02;
@@ -70,9 +74,11 @@ namespace livebpm {
             c.fastTempoThreshold = 150.0;
             c.silenceTimeoutSec = 2.0;
             c.warmupHops = 40;
-            c.confThreshold = 0.50;
+            c.confThreshold = 0.60;
             c.octaveMismatchTolerance = 60;
             c.hardResetThreshold = 20.0;
+            c.dynamicWindowPercent = 0.40;
+            c.shatterConfidenceThreshold = 0.75;
         } else if (name == "saxophone") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.020; 
@@ -92,9 +98,11 @@ namespace livebpm {
             c.fastTempoThreshold = 140.0;
             c.silenceTimeoutSec = 2.0;
             c.warmupHops = 60;
-            c.confThreshold = 0.45;
+            c.confThreshold = 0.60;
             c.octaveMismatchTolerance = 100;
             c.hardResetThreshold = 25.0;
+            c.dynamicWindowPercent = 0.35;
+            c.shatterConfidenceThreshold = 0.70;
         } else if (name == "acousticbass" || name == "acoustic bass") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.025; 
@@ -114,9 +122,11 @@ namespace livebpm {
             c.fastTempoThreshold = 130.0;
             c.silenceTimeoutSec = 2.0;
             c.warmupHops = 40;
-            c.confThreshold = 0.30;
+            c.confThreshold = 0.55;
             c.octaveMismatchTolerance = 200;
             c.hardResetThreshold = 15.0;
+            c.dynamicWindowPercent = 0.25;
+            c.shatterConfidenceThreshold = 0.65;
         } else if (name == "electricbass") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.015;
@@ -136,9 +146,11 @@ namespace livebpm {
             c.fastTempoThreshold = 130.0;
             c.silenceTimeoutSec = 2.0;
             c.warmupHops = 40;
-            c.confThreshold = 0.40;
+            c.confThreshold = 0.60;
             c.octaveMismatchTolerance = 200;
             c.hardResetThreshold = 20;
+            c.dynamicWindowPercent = 0.30;
+            c.shatterConfidenceThreshold = 0.65;
         } else if (name == "cajon") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.03;
@@ -158,9 +170,11 @@ namespace livebpm {
             c.fastTempoThreshold = 160.0;
             c.silenceTimeoutSec = 1.0;
             c.warmupHops = 20;
-            c.confThreshold = 0.60;
+            c.confThreshold = 0.65;
             c.octaveMismatchTolerance = 30;
             c.hardResetThreshold = 15.0;
+            c.dynamicWindowPercent = 0.50;
+            c.shatterConfidenceThreshold = 0.70;
         } else if (name == "liveband") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.04;
@@ -180,9 +194,11 @@ namespace livebpm {
             c.fastTempoThreshold = 150.0;
             c.silenceTimeoutSec = 3.0;
             c.warmupHops = 60;
-            c.confThreshold = 0.30;
+            c.confThreshold = 0.55;
             c.octaveMismatchTolerance = 40;
             c.hardResetThreshold = 20.0;
+            c.dynamicWindowPercent = 0.45;
+            c.shatterConfidenceThreshold = 0.65;
         } else if (name == "slowacoustic") {
             c.useHeuristics = false;
             c.SILENCE_THRESHOLD = 0.01;
@@ -202,9 +218,11 @@ namespace livebpm {
             c.fastTempoThreshold = 100.0;
             c.silenceTimeoutSec = 4.0;
             c.warmupHops = 80;
-            c.confThreshold = 0.30;
+            c.confThreshold = 0.45;
             c.octaveMismatchTolerance = 150;
             c.hardResetThreshold = 40.0;
+            c.dynamicWindowPercent = 0.25;
+            c.shatterConfidenceThreshold = 0.60;
         }
 
         return c;

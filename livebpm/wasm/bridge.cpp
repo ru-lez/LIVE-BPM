@@ -92,6 +92,8 @@ public:
         result.set("confThreshold", c.confThreshold);
         result.set("octaveMismatchTolerance", c.octaveMismatchTolerance);
         result.set("hardResetThreshold", c.hardResetThreshold);
+        result.set("dynamicWindowPercent", c.dynamicWindowPercent);
+        result.set("shatterConfidenceThreshold", c.shatterConfidenceThreshold);
         
         return result;
     }
@@ -167,6 +169,12 @@ public:
     void setHardResetThreshold(double val) {
         engine_->setHardResetThreshold(val);
     }
+    void setDynamicWindowPercent(double percent) {
+        engine_->setDynamicWindowPercent(percent);
+    }
+    void setShatterConfidenceThreshold(double threshold) {
+        engine_->setShatterConfidenceThreshold(threshold);
+    }
 
 private:
     std::unique_ptr<livebpm::Engine> engine_;
@@ -215,5 +223,7 @@ EMSCRIPTEN_BINDINGS(livebpm) {
         .function("setConfThreshold", &LiveBpmWasm::setConfThreshold)
         .function("setOctaveMismatchTolerance", &LiveBpmWasm::setOctaveMismatchTolerance)
         .function("setHardResetThreshold", &LiveBpmWasm::setHardResetThreshold)
+        .function("setDynamicWindowPercent", &LiveBpmWasm::setDynamicWindowPercent)
+        .function("setShatterConfidenceThreshold", &LiveBpmWasm::setShatterConfidenceThreshold)
         .function("loadPreset", &LiveBpmWasm::loadPreset);
 }

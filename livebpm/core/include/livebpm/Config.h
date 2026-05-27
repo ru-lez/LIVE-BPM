@@ -38,7 +38,7 @@ namespace livebpm {
         // Magnetic Snapping
         double magneticSnapRange = 0.15;
         // Minimum confidence score required before accepting or displaying a tempo estimate
-        double confThreshold = 0.45;
+        double confThreshold = 0.50;
 
         // How fast the dynamic gate threshold adapts to volume changes
         double gatingAlpha = 0.1;
@@ -48,6 +48,11 @@ namespace livebpm {
         double fluxCompression = 50.0;
         // Stable-BPM EMA alpha (lower = stickier/resists drift)
         double hysteresisBlend = 0.05;
+
+        // Percentage range based on current stable BPM
+        double dynamicWindowPercent = 0.40;
+        // Break the lock and wide-open the bounds if confidence drops below this
+        double shatterConfidenceThreshold = 0.70;
 
         // Whether to apply heuristics for fast tempo detection and octave error correction
         bool useHeuristics = true; 
