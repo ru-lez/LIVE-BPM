@@ -381,21 +381,29 @@ struct Engine::Impl {
             currentMaxBpm = std::min(config.maxBpm, dynamicMax);
         }
 
-        // Lock management / shatter logic
-        if (tempo.currentStableBpm > 0.0 && previousConfidence >= config.shatterConfidenceThreshold) {
-            tempo.windowLockTimer++;
-            tempo.lowConfidenceStreak = 0;
-
-            if (tempo.windowLockTimer > 300) {
-                tempo.isWindowLocked = true;
+        // Lock management — hysteresis band between entry and release thresholds.
+        // Dead band (lockReleaseConfidence < conf < lockEntryConfidence): neither
+        // counter moves, so a normal mid-confidence wobble neither builds nor breaks.
+        if (tempo.isWindowLocked) {
+            // Already locked: only release on genuinely low confidence.
+            if (previousConfidence <= config.lockReleaseConfidence) {
+                tempo.lowConfidenceStreak++;
+                if (tempo.lowConfidenceStreak > 300) {
+                    tempo.isWindowLocked = false;
+                    tempo.lowConfidenceStreak = 0;
+                }
+            } else {
+                tempo.lowConfidenceStreak = 0;
             }
         } else {
-            tempo.lowConfidenceStreak++;
-            tempo.windowLockTimer = 0;
-
-            // Only shatter after sustained low confidence
-            if (tempo.lowConfidenceStreak > 30) {
-                tempo.isWindowLocked = false;
+            // Not locked: only build toward a lock on high confidence.
+            if (tempo.currentStableBpm > 0.0 && previousConfidence >= config.lockEntryConfidence) {
+                tempo.windowLockTimer++;
+                if (tempo.windowLockTimer > 300) {
+                    tempo.isWindowLocked = true;
+                }
+            } else {
+                tempo.windowLockTimer = 0;
             }
         }
 
@@ -497,17 +505,21 @@ struct Engine::Impl {
     }
 
         double applyHysteresisAndCommit(double currentBpm) {
-        // Strict veto when locked
-        // When the dynamic window is locked, never allow half/double-time jumps even if the estimator or alternation heuristics suggest it
+        // --- LOCKED: total freeze. While the window is locked the only permitted
+        // movement is micro-drift within lockedDriftTolerance. Every other reading —
+        // half-time, double-time, hard jumps, glide — is rejected outright.
+        // The sole exit from this freeze is the release condition in estimateRawTempo
+        // (5s of <50% confidence), not any signal-based heuristic here.
         if (tempo.isWindowLocked && tempo.currentStableBpm > 10.0) {
-            double ratio = currentBpm / tempo.currentStableBpm;
-            if (std::abs(ratio - 2.0) < 0.25 || std::abs(ratio - 0.5) < 0.25) {
-                tempo.octaveMismatchCount = 0; // reset counter
-                return tempo.currentStableBpm; // force clamp
+            if (std::abs(currentBpm - tempo.currentStableBpm) > config.lockedDriftTolerance) {
+                return tempo.currentStableBpm;
             }
+            tempo.currentStableBpm = (1.0 - config.hysteresisBlend) * tempo.currentStableBpm
+                                   + config.hysteresisBlend * currentBpm;
+            return tempo.currentStableBpm;
         }
 
-        // --- C. COMMIT (Hysteresis/Escape Hatch) ---
+        // --- UNLOCKED: existing logic runs as before ---
         if (tempo.currentStableBpm == 0.0) {
             tempo.currentStableBpm = currentBpm;
         } else {
@@ -591,6 +603,8 @@ void Engine::processBlock(const float* samples, int numSamples) {
             // Immediately scale the detected pulse back to Master 1/4 Note Tempo
             rawBpm /= inputScale;
 
+            double rawBeforeCommit = rawBpm;
+
             if (d.config.useHeuristics) {
                 if (!d.tempo.isWindowLocked) {
                     rawBpm = d.applyAlternationHeuristics(rawBpm);
@@ -599,11 +613,22 @@ void Engine::processBlock(const float* samples, int numSamples) {
 
                 outputBpm = rawBpm;
                 bool alreadyLockedFast = (d.tempo.currentStableBpm > d.config.fastTempoThreshold);
-                
-                if (!alreadyLockedFast && rawBpm > d.config.fastTempoThreshold && d.tempo.highBpmConfirmationCount < 12) {
+
+                if (!d.tempo.isWindowLocked && !alreadyLockedFast
+                        && rawBpm > d.config.fastTempoThreshold && d.tempo.highBpmConfirmationCount < 12) {
                     outputBpm *= 0.5;
                 }
             }
+
+            std::cout << "[DROP] raw=" << std::fixed << std::setprecision(1) << rawBeforeCommit
+                      << " | output=" << outputBpm
+                      << " | stable=" << d.tempo.currentStableBpm
+                      << " | locked=" << (d.tempo.isWindowLocked ? "Y" : "N")
+                      << " | lockTimer=" << d.tempo.windowLockTimer
+                      << " | lowConfStreak=" << d.tempo.lowConfidenceStreak
+                      << " | conf=" << std::setprecision(2) << latestResult_.confidence
+                      << " | highBpmConf=" << d.tempo.highBpmConfirmationCount
+                      << "\n";
 
             // Set the beat tracker lag using the resolution BPM
             double trackingBpmForBeatTracker = outputBpm * inputScale;

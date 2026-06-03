@@ -53,6 +53,11 @@ namespace livebpm {
         double dynamicWindowPercent = 0.40;
         // Break the lock and wide-open the bounds if confidence drops below this
         double shatterConfidenceThreshold = 0.70;
+        // Max BPM drift allowed while locked; anything beyond this is rejected outright
+        double lockedDriftTolerance = 3.0;
+
+        double lockEntryConfidence  = 0.75;   // must be at/above this to build a lock
+        double lockReleaseConfidence = 0.60;  // must be at/below this to release
 
         // Whether to apply heuristics for fast tempo detection and octave error correction
         bool useHeuristics = true; 
