@@ -682,7 +682,10 @@ void Engine::updateTunableConfig(const Config& config) {
     setWarmupHops(config.warmupHops);
     setOctaveMismatchTolerance(config.octaveMismatchTolerance);
     setHardResetThreshold(config.hardResetThreshold);
-    
+    setLockedDriftTolerance(config.lockedDriftTolerance);
+    setLockEntryConfidence(config.lockEntryConfidence);
+    setLockReleaseConfidence(config.lockReleaseConfidence);
+
     // uiSmoothing, VISUAL_DEADZONE, magneticSnapRange, and confThreshold are not set here as they are handled in the consumer application (CLI or WASM)
 }
 
@@ -763,6 +766,15 @@ void Engine::setDynamicWindowPercent(double percent) {
 }
 void Engine::setShatterConfidenceThreshold(double threshold) {
     pImpl_->config.shatterConfidenceThreshold = threshold;
+}
+void Engine::setLockedDriftTolerance(double tolerance) {
+    pImpl_->config.lockedDriftTolerance = tolerance;
+}
+void Engine::setLockEntryConfidence(double confidence) {
+    pImpl_->config.lockEntryConfidence = confidence;
+}
+void Engine::setLockReleaseConfidence(double confidence) {
+    pImpl_->config.lockReleaseConfidence = confidence;
 }
 
 void Engine::reset() {

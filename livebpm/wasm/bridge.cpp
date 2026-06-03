@@ -94,7 +94,10 @@ public:
         result.set("hardResetThreshold", c.hardResetThreshold);
         result.set("dynamicWindowPercent", c.dynamicWindowPercent);
         result.set("shatterConfidenceThreshold", c.shatterConfidenceThreshold);
-        
+        result.set("lockedDriftTolerance", c.lockedDriftTolerance);
+        result.set("lockEntryConfidence", c.lockEntryConfidence);
+        result.set("lockReleaseConfidence", c.lockReleaseConfidence);
+
         return result;
     }
 
@@ -175,6 +178,15 @@ public:
     void setShatterConfidenceThreshold(double threshold) {
         engine_->setShatterConfidenceThreshold(threshold);
     }
+    void setLockedDriftTolerance(double val) {
+        engine_->setLockedDriftTolerance(val);
+    }
+    void setLockEntryConfidence(double val) {
+        engine_->setLockEntryConfidence(val);
+    }
+    void setLockReleaseConfidence(double val) {
+        engine_->setLockReleaseConfidence(val);
+    }
 
 private:
     std::unique_ptr<livebpm::Engine> engine_;
@@ -225,5 +237,8 @@ EMSCRIPTEN_BINDINGS(livebpm) {
         .function("setHardResetThreshold", &LiveBpmWasm::setHardResetThreshold)
         .function("setDynamicWindowPercent", &LiveBpmWasm::setDynamicWindowPercent)
         .function("setShatterConfidenceThreshold", &LiveBpmWasm::setShatterConfidenceThreshold)
+        .function("setLockedDriftTolerance", &LiveBpmWasm::setLockedDriftTolerance)
+        .function("setLockEntryConfidence", &LiveBpmWasm::setLockEntryConfidence)
+        .function("setLockReleaseConfidence", &LiveBpmWasm::setLockReleaseConfidence)
         .function("loadPreset", &LiveBpmWasm::loadPreset);
 }

@@ -41,6 +41,9 @@ public:
     void setHardResetThreshold(double threshold);
     void setDynamicWindowPercent(double percent);
     void setShatterConfidenceThreshold(double threshold);
+    void setLockedDriftTolerance(double tolerance);
+    void setLockEntryConfidence(double confidence);
+    void setLockReleaseConfidence(double confidence);
 
     Result getLatestResult() const;
     double getVisualDeadzone() const;

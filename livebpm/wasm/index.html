@@ -427,6 +427,24 @@
                         </label>
                         <input type="range" id="warmupHops" min="10" max="250" step="10" value="50" oninput="updateParam('warmupHops', this.value)">
                     </div>
+                    <div class="param-group">
+                        <label data-tip="Confidence must stay at or above this for 5 seconds before the BPM range locks. Higher = harder to lock in.">
+                            Lock Entry Confidence <span id="lockEntryConfidenceVal">0.75</span>
+                        </label>
+                        <input type="range" id="lockEntryConfidence" min="0.50" max="0.95" step="0.05" value="0.75" oninput="updateParam('lockEntryConfidence', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label data-tip="Confidence must drop to or below this for 5 seconds before the lock releases. Lower = harder to unlock.">
+                            Lock Release Confidence <span id="lockReleaseConfidenceVal">0.50</span>
+                        </label>
+                        <input type="range" id="lockReleaseConfidence" min="0.10" max="0.70" step="0.05" value="0.50" oninput="updateParam('lockReleaseConfidence', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label data-tip="Maximum BPM drift allowed while locked. Anything beyond this is rejected outright. Set to 0 for a completely frozen lock.">
+                            Locked Drift Tolerance <span id="lockedDriftToleranceVal">3.0</span>
+                        </label>
+                        <input type="range" id="lockedDriftTolerance" min="0.0" max="10.0" step="0.5" value="3.0" oninput="updateParam('lockedDriftTolerance', this.value)">
+                    </div>
                 </div>
             </div>
 
@@ -512,7 +530,8 @@
             warmupHops: 0, fastTempoThreshold: 0, octaveMismatchTolerance: 0, hardResetThreshold: 0,
             visualDeadzone: 1, silenceTimeoutSec: 1,
             complexDomainWeight: 2, gatingAlpha: 2, noveltySmoothing: 2, hysteresisBlend: 2, uiSmoothing: 2,
-            magneticSnapRange: 2, confThreshold: 2, dynamicWindowPercent: 2, shatterConfidenceThreshold: 2
+            magneticSnapRange: 2, confThreshold: 2, dynamicWindowPercent: 2, shatterConfidenceThreshold: 2,
+            lockEntryConfidence: 2, lockReleaseConfidence: 2, lockedDriftTolerance: 1
             // Anything not in this list defaults to 3 decimal places
         };
 
