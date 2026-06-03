@@ -98,7 +98,7 @@
         .advanced-menu {
             display: none; background: #242424; border-radius: 8px; padding: 20px;
             margin-top: 15px; text-align: left; 
-            width: 900px; max-width: 90vw;
+            width: 1200px; max-width: 90vw;
             margin-left: auto; margin-right: auto;
             border: 1px solid #333;
         }
@@ -238,34 +238,34 @@
         <div class="bpm-display" id="bpmDisplay">--</div>
         
         <div class="confidence">
-            Confidence
+            Confidence <span id="confidencePct" style="font-size:0.9rem; opacity:0.7;">0%</span>
             <div class="confidence-bar">
                 <div class="confidence-fill" id="confidenceFill" style="width: 0%"></div>
             </div>
         </div>
 
         <div class="note-resolution">
-            <label>
+            <label data-tip="Auto-detects the most natural pulse and locks to master 1/4 tempo.">
                 <input type="radio" name="resolution" value="6" onchange="updateNoteResolution(this.value)"> 
                 Smart
             </label>
-            <label>
+            <label data-tip="Tracks the tempo on a half-note pulse.">
                 <input type="radio" name="resolution" value="1" onchange="updateNoteResolution(this.value)"> 
                 1/2 Note
             </label>
-            <label>
+            <label data-tip="Tracks the tempo on a standard quarter-note pulse (Default).">
                 <input type="radio" name="resolution" value="2" onchange="updateNoteResolution(this.value)" checked> 
                 1/4 Note
             </label>
-            <label>
+            <label data-tip="Tracks the tempo on an 8th-note pulse.">
                 <input type="radio" name="resolution" value="3" onchange="updateNoteResolution(this.value)"> 
                 1/8 Note
             </label>
-            <label>
+            <label data-tip="Tracks the tempo on an 8th-note triplet pulse (3 per beat).">
                 <input type="radio" name="resolution" value="4" onchange="updateNoteResolution(this.value)"> 
                 1/8 Note Triplet
             </label>
-            <label>
+            <label data-tip="Tracks the tempo on a 16th-note pulse.">
                 <input type="radio" name="resolution" value="5" onchange="updateNoteResolution(this.value)"> 
                 1/16 Note
             </label>
@@ -299,31 +299,19 @@
             <p class="tooltip-hint">Hover over any parameter label to view what it does.</p>
 
             <div class="param-section">
-                <h3>Onset Detection & Gating</h3>
+                <h3>Onset Detection</h3>
                 <div class="param-grid">
                     <div class="param-group">
-                        <label data-tip="Sets the absolute volume floor. Increase this to stop background room noise or microphone hum from triggering false beats.">
-                            Noise Gate (Silence) <span id="silenceThresholdVal">0.030</span>
+                        <label data-tip="Determines the minimum energy jump required to trigger a note. Lower values catch quiet taps but may increase false positives.">
+                            Onset Sensitivity <span id="onsetSensitivityVal">0.015</span>
                         </label>
-                        <input type="range" id="silenceThreshold" min="0.0" max="0.1" step="0.005" value="0.03" oninput="updateParam('silenceThreshold', this.value)">
+                        <input type="range" id="onsetSensitivity" min="0.005" max="0.1" step="0.005" value="0.015" oninput="updateParam('onsetSensitivity', this.value)">
                     </div>
                     <div class="param-group">
                         <label data-tip="Balances detection methods. Higher values track smooth legato instruments (like flutes) better, lower values favour punchy percussive hits.">
                             Complex Domain Weight <span id="complexDomainWeightVal">0.40</span>
                         </label>
                         <input type="range" id="complexDomainWeight" min="0.0" max="1.0" step="0.05" value="0.4" oninput="updateParam('complexDomainWeight', this.value)">
-                    </div>
-                    <div class="param-group">
-                        <label data-tip="Determines the minimum energy jump required to trigger a note. Lower values catch quiet taps but may increase false positives.">
-                            Onset Sensitivity <span id="onsetSensitivityVal">0.015</span>
-                        </label>
-                        <input type="range" id="onsetSensitivity" min="0.001" max="0.1" step="0.001" value="0.015" oninput="updateParam('onsetSensitivity', this.value)">
-                    </div>
-                    <div class="param-group">
-                        <label data-tip="Controls how fast the internal noise gate adapts to the musician naturally getting louder or softer over time.">
-                            Gating Alpha (Adaptation) <span id="gatingAlphaVal">0.10</span>
-                        </label>
-                        <input type="range" id="gatingAlpha" min="0.01" max="0.5" step="0.01" value="0.1" oninput="updateParam('gatingAlpha', this.value)">
                     </div>
                     <div class="param-group">
                         <label data-tip="Flattens extreme volume differences, ensuring quiet notes and heavy accents are weighted more equally by the tracking engine">
@@ -341,16 +329,52 @@
             </div>
 
             <div class="param-section">
-                <h3>Tempo Engine & Hysteresis</h3>
+                <h3>Noise &amp; Adaptive Gating</h3>
                 <div class="param-grid">
                     <div class="param-group">
-                        <label data-tip="The lowest tempo range the engine will search for.">
+                        <label data-tip="Sets the absolute volume floor. Increase this to stop background room noise or microphone hum from triggering false beats.">
+                            Noise Gate (Silence) <span id="silenceThresholdVal">0.030</span>
+                        </label>
+                        <input type="range" id="silenceThreshold" min="0.0" max="0.1" step="0.005" value="0.03" oninput="updateParam('silenceThreshold', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label data-tip="Controls how fast the internal noise gate adapts to the musician naturally getting louder or softer over time.">
+                            Gating Alpha (Adaptation) <span id="gatingAlphaVal">0.10</span>
+                        </label>
+                        <input type="range" id="gatingAlpha" min="0.01" max="0.5" step="0.01" value="0.1" oninput="updateParam('gatingAlpha', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label data-tip="Seconds of silence required before the engine flushes its internal state.">
+                            Silence Timeout (sec) <span id="silenceTimeoutSecVal">2.0</span>
+                        </label>
+                        <input type="range" id="silenceTimeoutSec" min="0.5" max="5.0" step="0.5" value="2.0" oninput="updateParam('silenceTimeoutSec', this.value)">
+                    </div>
+                </div>
+            </div>
+
+            <div class="param-section">
+                <h3>Tempo Tracking &amp; Locking</h3>
+                <div class="param-grid">
+                    <div class="param-group">
+                        <label data-tip="Dynamically restricts the BPM search boundary around the current stable tempo to prevent double/half-time errors.">
+                            Dynamic Window Size <span id="dynamicWindowPercentVal">0.40</span>
+                        </label>
+                        <input type="range" id="dynamicWindowPercent" min="0.10" max="1.00" step="0.05" value="0.40" oninput="updateParam('dynamicWindowPercent', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label data-tip="Breaks the tracking lock and resets bounds to global max/min if confidence drops below this level.">
+                            Shatter Threshold <span id="shatterConfidenceThresholdVal">0.70</span>
+                        </label>
+                        <input type="range" id="shatterConfidenceThreshold" min="0.50" max="0.90" step="0.05" value="0.70" oninput="updateParam('shatterConfidenceThreshold', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label data-tip="The lowest tempo range the engine will initially search for.">
                             Target Minimum BPM <span id="minBpmVal">40</span>
                         </label>
                         <input type="range" id="minBpm" min="30.0" max="120.0" step="1.0" value="40.0" oninput="updateParam('minBpm', this.value)">
                     </div>
                     <div class="param-group">
-                        <label data-tip="The highest tempo range the engine will search for.">
+                        <label data-tip="The highest tempo range the engine will initially search for.">
                             Target Maximum BPM <span id="maxBpmVal">240</span>
                         </label>
                         <input type="range" id="maxBpm" min="120.0" max="480.0" step="1.0" value="240.0" oninput="updateParam('maxBpm', this.value)">
@@ -368,6 +392,18 @@
                         <input type="range" id="hysteresisBlend" min="0.01" max="0.2" step="0.01" value="0.05" oninput="updateParam('hysteresisBlend', this.value)">
                     </div>
                     <div class="param-group">
+                        <label data-tip="Determines how long the engine will ignore sudden half-time or double-time drops before deciding the tempo change is intentional. Increase this for songs with long, sparse sections (like pre-choruses or bridges).">
+                            Octave Lock Tolerance <span id="octaveMismatchToleranceVal">100</span>
+                        </label>
+                        <input type="range" id="octaveMismatchTolerance" min="10" max="300" step="10" value="100" oninput="updateParam('octaveMismatchTolerance', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label data-tip="BPM threshold above which fast-tempo heuristics and octave-correction logic become more aggressive to reduce half-time detection errors.">
+                            Fast Tempo Threshold <span id="fastTempoThresholdVal">140</span>
+                        </label>
+                        <input type="range" id="fastTempoThreshold" min="100" max="200" step="1" value="140" oninput="updateParam('fastTempoThreshold', this.value)">
+                    </div>
+                    <div class="param-group">
                         <label data-tip="The threshold required before the engine allows the BPM to suddenly double (e.g. jumping from 60 to 120).">
                             Double-Time Jump Tolerance <span id="doubleTimeJumpThresholdVal">20</span>
                         </label>
@@ -378,6 +414,18 @@
                             Half-Time Jump Tolerance <span id="halfTimeJumpThresholdVal">10</span>
                         </label>
                         <input type="range" id="halfTimeJumpThreshold" min="5.0" max="30.0" step="5.0" value="10.0" oninput="updateParam('halfTimeJumpThreshold', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label data-tip="If the tempo changes by more than this amount, the engine will instantly snap to the new BPM rather than smoothly gliding.">
+                            Hard Reset Threshold <span id="hardResetThresholdVal">20</span>
+                        </label>
+                        <input type="range" id="hardResetThreshold" min="5" max="50" step="5" value="20" oninput="updateParam('hardResetThreshold', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label data-tip="Number of frames to wait on startup before producing a valid estimate.">
+                            Warmup Hops <span id="warmupHopsVal">50</span>
+                        </label>
+                        <input type="range" id="warmupHops" min="10" max="250" step="10" value="50" oninput="updateParam('warmupHops', this.value)">
                     </div>
                 </div>
             </div>
@@ -402,6 +450,12 @@
                             Magnetic Snap Range <span id="magneticSnapRangeVal">0.15</span>
                         </label>
                         <input type="range" id="magneticSnapRange" min="0.0" max="0.5" step="0.05" value="0.15" oninput="updateParam('magneticSnapRange', this.value)">
+                    </div>
+                    <div class="param-group">
+                        <label data-tip="The minimum confidence score required to update the BPM display. Higher values improve stability and reject uncertain detections.">
+                            Confidence Threshold <span id="confThresholdVal">0.50</span>
+                        </label>
+                        <input type="range" id="confThreshold" min="0.20" max="0.95" step="0.05" value="0.50" oninput="updateParam('confThreshold', this.value)">
                     </div>
                 </div>
             </div>
@@ -447,7 +501,7 @@
 
         const DisplayState = {
             currentBpm: 0.0,
-            confThreshold: 0.45,     // Ignore incoming BPMs if confidence is below this
+            confThreshold: 0.50,     // Ignore incoming BPMs if confidence is below this, will be overridden by worklet message
             alpha: 0.15,             // EMA smoothing factor (lower = smoother) Default value, will be overridden by worklet message
             visualDeadzone: 0.1,     // BPM changes smaller than this won't update the display to prevent jitter. Default value, will be overridden by worklet message
             magneticSnapRange: 0.10  // Default value, will be overridden by worklet message
@@ -455,15 +509,17 @@
 
         const PARAM_DECIMALS = {
             minBpm: 0, maxBpm: 0, doubleTimeJumpThreshold: 0, halfTimeJumpThreshold: 0, fluxCompression: 0,
-            visualDeadzone: 1,
+            warmupHops: 0, fastTempoThreshold: 0, octaveMismatchTolerance: 0, hardResetThreshold: 0,
+            visualDeadzone: 1, silenceTimeoutSec: 1,
             complexDomainWeight: 2, gatingAlpha: 2, noveltySmoothing: 2, hysteresisBlend: 2, uiSmoothing: 2,
-            magneticSnapRange: 2
+            magneticSnapRange: 2, confThreshold: 2, dynamicWindowPercent: 2, shatterConfidenceThreshold: 2
             // Anything not in this list defaults to 3 decimal places
         };
 
         const UI = {
             bpm: document.getElementById('bpmDisplay'),
             conf: document.getElementById('confidenceFill'),
+            confPct: document.getElementById('confidencePct'),
             status: document.getElementById('status'),
             startBtn: document.getElementById('startBtn'),
             wavBtn: document.getElementById('wavBtn'),
@@ -600,13 +656,14 @@
                 DisplayState.alpha = config.uiSmoothing;
                 DisplayState.visualDeadzone = config.visualDeadzone;
                 DisplayState.magneticSnapRange = config.magneticSnapRange;
+                DisplayState.confThreshold = config.confThreshold;
                 
                 // Update Checkbox
-                document.getElementById('heuristicsToggle').checked = config.heuristics;
+                document.getElementById('heuristicsToggle').checked = config.useHeuristics;
                 
                 // Loop over the config payload to update sliders
                 for (const param in config) {
-                    if (param === 'heuristics') continue; // Skip boolean
+                    if (param === 'useHeuristics') continue; // Skip boolean
                     
                     const el = document.getElementById(param);
                     const textEl = document.getElementById(param + 'Val');
@@ -652,20 +709,11 @@
             const decimals = PARAM_DECIMALS[param] !== undefined ? PARAM_DECIMALS[param] : 3;
             document.getElementById(param + 'Val').textContent = value.toFixed(decimals);
             
-            if (param === 'uiSmoothing') {
-                DisplayState.alpha = value; // Update JS-side parameter directly
-                return;
-            }
-            
-            if (param === 'visualDeadzone') {
-                DisplayState.visualDeadzone = value; // Update JS-side parameter directly
-                return;
-            }
-
-            if (param === 'magneticSnapRange') {
-                DisplayState.magneticSnapRange = value; // Update JS-side parameter directly
-                return;
-            }
+            // Update JS-side parameter directly
+            if (param === 'uiSmoothing') DisplayState.alpha = value;
+            if (param === 'visualDeadzone') DisplayState.visualDeadzone = value;
+            if (param === 'magneticSnapRange') DisplayState.magneticSnapRange = value;
+            if (param === 'confThreshold') DisplayState.confThreshold = value;
             
             // Dispatch C++ parameter changes to the worklet
             if (audioWorkletNode) {
@@ -744,6 +792,7 @@
                 // Update DOM (Using cached elements)
                 UI.bpm.textContent = targetDisplayValue.toFixed(1);
                 UI.conf.style.width = (data.confidence * 100) + '%';
+                UI.confPct.textContent = Math.round(data.confidence * 100) + '%';
 
             } else {
                 // INVALID READING

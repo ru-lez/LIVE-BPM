@@ -37,6 +37,8 @@ namespace livebpm {
         double VISUAL_DEADZONE = 0.1;
         // Magnetic Snapping
         double magneticSnapRange = 0.15;
+        // Minimum confidence score required before accepting or displaying a tempo estimate
+        double confThreshold = 0.50;
 
         // How fast the dynamic gate threshold adapts to volume changes
         double gatingAlpha = 0.1;
@@ -47,8 +49,30 @@ namespace livebpm {
         // Stable-BPM EMA alpha (lower = stickier/resists drift)
         double hysteresisBlend = 0.05;
 
+        // Percentage range based on current stable BPM
+        double dynamicWindowPercent = 0.40;
+        // Break the lock and wide-open the bounds if confidence drops below this
+        double shatterConfidenceThreshold = 0.70;
+        // Max BPM drift allowed while locked; anything beyond this is rejected outright
+        double lockedDriftTolerance = 3.0;
+
+        double lockEntryConfidence  = 0.75;   // must be at/above this to build a lock
+        double lockReleaseConfidence = 0.60;  // must be at/below this to release
+
         // Whether to apply heuristics for fast tempo detection and octave error correction
         bool useHeuristics = true; 
+
+        // Duration of continuous silence before the detector resets or suspends
+        double silenceTimeoutSec = 2.0;
+        // Number of analysis hops required before tempo estimation is considered
+        int warmupHops = 50;
+
+        // BPM threshold above which fast-tempo heuristics and octave-correction
+        double fastTempoThreshold = 140.0;
+        // Hystersis tolerance before it breaks the lock
+        int octaveMismatchTolerance = 100;
+        // Tempo difference for instant snap
+        double hardResetThreshold = 20.0;
 
         // Target note resolution for tempo estimation (Default: Quarter Notes)
         NoteResolution targetResolution = NoteResolution::QuarterNote;

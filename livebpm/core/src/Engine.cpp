@@ -10,7 +10,7 @@
  * How it Works
  *
  * - Getting the Novelty Curve (Onset Detection)
- *   First, the FFT magnitues and phases for each audio block are calculated. 
+ *   First, the FFT magnitudes and phases for each audio block are calculated. 
  *   To find the notes, a dual-stream approach is used:
  *     1. Semitone/Super Flux: Tracks energy shifts across log-spaced semitone bands.
  *        It handles hard transients, like percussion.
@@ -26,16 +26,25 @@
  *   The search window is dynamically scaled depending on the target note resolution.
  *   (e.g. 16th notes vs half notes)
  *
- * - Stablising Readings (Post-Processing & Hysteresis)
+ *   Once a stable tempo is locked, a Dynamic Tracking Window constrains the estimator's
+ *   search range to ±X% around the current stable BPM. This dramatically reduces
+ *   accidental half-time and double-time jumps. A lock timer combined with a
+ *   low-confidence streak counter makes the window tolerant of short sparse or
+ *   legato passages without shattering the lock.
+ *
+ * - Stabilising Readings (Post-Processing & Hysteresis)
  *   Instead of relying purely on the raw tempo estimate, the engine implements heuristics
  *   and hysteresis to prevent erratic jumps, especially in challenging scenarios like
  *   fast tempos or weak signals.
  *     1. Heuristics: The engine looks for strumming or tapping patterns by analysing
  *        amplitude peaks. It compares even/odd peak ratios to make educated guesses to
- *        prevent accidental double-time BPM readings.
- *     2. Hysteresis Lock: Implemented where the system resists sudden BPM changes based
- *        on its history. If the audio signal is muddy or ambiguous, the engine holds onto
- *        the last stable BPM instead of jumping to half-time or double-time.
+ *        prevent accidental double-time BPM readings. Heuristics are automatically
+ *        disabled once the dynamic window is locked.
+ *     2. Hysteresis Lock: The system resists sudden BPM changes based on its history.
+ *        An asymmetric veto now strictly blocks half-time candidates while still
+ *        allowing legitimate double-time readings, which isimportant for dense percussion.
+ *        If the audio signal is muddy or ambiguous, the engine holds onto the last
+ *        stable BPM instead of jumping to half-time or double-time.
  * 
  * - UI Smoothing (WASM & CLI Integration)
  *   Due to the core engine designed to output raw precision, the CLI and WASM front-ends
@@ -69,11 +78,6 @@
 namespace livebpm {
 
 struct Engine::Impl {
-    // Magic numbers
-    static constexpr double FAST_TEMPO_THRESHOLD = 140.0;
-    static constexpr double SILENCE_TIMEOUT_SEC = 2.0;
-    static constexpr int WARMUP_HOPS = 50;
-
     Config config;
 
     // FFT and buffer state
@@ -126,6 +130,9 @@ struct Engine::Impl {
         int octaveMismatchCount = 0;
         int highBpmConfirmationCount = 0;
         int consecutiveSilenceHops = 0;
+        int windowLockTimer = 0;
+        bool isWindowLocked = false;
+        int lowConfidenceStreak = 0;
     } tempo;
 
     dsp::RingBuffer<float> ringBuffer;
@@ -182,6 +189,7 @@ struct Engine::Impl {
         tempo.highBpmConfirmationCount = 0;
         tempo.smoothedAlternationRatio = 1.0f;
         tempo.consecutiveSilenceHops = 0;
+        tempo.lowConfidenceStreak = 0;
 
         // Clear gating moving averages
         gating.hopsProcessed = 0;
@@ -277,7 +285,7 @@ struct Engine::Impl {
         float combinedFlux;
         float cdWeight = static_cast<float>(config.complexDomainWeight);
         
-        if (gating.hopsProcessed < WARMUP_HOPS) {
+        if (gating.hopsProcessed < config.warmupHops) {
             combinedFlux = gatedSemitone;
         } else {
             // Dynamically balance the streams based on UI input
@@ -296,7 +304,7 @@ struct Engine::Impl {
 
             // Only bleed the engine state if the silence has lasted for > 2 seconds
             // featureRate = hops per second, so 2.0 * featureRate = 2 seconds
-            if (tempo.consecutiveSilenceHops > static_cast<int>(SILENCE_TIMEOUT_SEC * fft.featureRate)) {
+            if (tempo.consecutiveSilenceHops > static_cast<int>(config.silenceTimeoutSec * fft.featureRate)) {
                 tempo.currentStableBpm = tempo.currentStableBpm * 0.95; 
                 tempo.highBpmConfirmationCount = 0; 
                 tempo.octaveMismatchCount = 0; 
@@ -358,12 +366,50 @@ struct Engine::Impl {
         return std::min(novelty.writePos, novelty.maxLength);
     }
 
-    double estimateRawTempo(float inputScale, bool useSmartMixedMode, double& outConfidence) {
+    double estimateRawTempo(float inputScale, bool useSmartMixedMode, double previousConfidence) {
         int noveltyLen = getNoveltyLength();
         
+        double currentMinBpm = config.minBpm;
+        double currentMaxBpm = config.maxBpm;
+
         // Dynamic Window Shift
-        double currentMinBpm = config.minBpm * inputScale;
-        double currentMaxBpm = config.maxBpm * inputScale;
+        if (tempo.isWindowLocked && tempo.currentStableBpm > 0.0) {
+            double dynamicMin = tempo.currentStableBpm * (1.0 - config.dynamicWindowPercent);
+            double dynamicMax = tempo.currentStableBpm * (1.0 + config.dynamicWindowPercent);
+            
+            currentMinBpm = std::max(config.minBpm, dynamicMin);
+            currentMaxBpm = std::min(config.maxBpm, dynamicMax);
+        }
+
+        // Lock management — hysteresis band between entry and release thresholds.
+        // Dead band (lockReleaseConfidence < conf < lockEntryConfidence): neither
+        // counter moves, so a normal mid-confidence wobble neither builds nor breaks.
+        if (tempo.isWindowLocked) {
+            // Already locked: only release on genuinely low confidence.
+            if (previousConfidence <= config.lockReleaseConfidence) {
+                tempo.lowConfidenceStreak++;
+                if (tempo.lowConfidenceStreak > 300) {
+                    tempo.isWindowLocked = false;
+                    tempo.lowConfidenceStreak = 0;
+                }
+            } else {
+                tempo.lowConfidenceStreak = 0;
+            }
+        } else {
+            // Not locked: only build toward a lock on high confidence.
+            if (tempo.currentStableBpm > 0.0 && previousConfidence >= config.lockEntryConfidence) {
+                tempo.windowLockTimer++;
+                if (tempo.windowLockTimer > 300) {
+                    tempo.isWindowLocked = true;
+                }
+            } else {
+                tempo.windowLockTimer = 0;
+            }
+        }
+
+        // Resolution Scaling
+        currentMinBpm *= inputScale;
+        currentMaxBpm *= inputScale;
 
         // Scale the center bias so the estimator doesn't drag subdivisions back to 1/4 notes
         double trackingBpm = (tempo.currentStableBpm > 0.0) ? tempo.currentStableBpm : 100.0;
@@ -372,18 +418,29 @@ struct Engine::Impl {
         auto tempoResult = tempoEstimator.estimate(
             novelty.noveltyBuffer.data(), noveltyLen,
             fft.featureRate, currentMinBpm, currentMaxBpm,
-            scaledTrackingBpm, outConfidence,
+            scaledTrackingBpm, previousConfidence,
             useSmartMixedMode
         );
+        
+        // Breakthrough Logic Defense
+        if (tempo.isWindowLocked) {
+            if (tempoResult.bpm > 0.0 && (tempoResult.bpm < currentMinBpm || tempoResult.bpm > currentMaxBpm)) {
+                tempoResult.bpm = scaledTrackingBpm;
+            }
+        }
         
         return tempoResult.bpm;
     }
 
     double applyAlternationHeuristics(double currentBpm) {
+        if (tempo.isWindowLocked) {
+            return currentBpm; 
+        }
+
         int noveltyLen = getNoveltyLength();
 
         // --- A. Analyse (Alternation Check) ---
-        if (currentBpm > FAST_TEMPO_THRESHOLD) { 
+        if (currentBpm > config.fastTempoThreshold) { 
             int beatLag = static_cast<int>(60.0 / currentBpm * fft.featureRate);
             
             if (noveltyLen > beatLag * 4) {
@@ -424,7 +481,7 @@ struct Engine::Impl {
             dynamicThreshold = 1.15f; // Strict if locked at slow speed
         }
 
-        if (currentBpm > FAST_TEMPO_THRESHOLD) {
+        if (currentBpm > config.fastTempoThreshold) {
             int beatLag = static_cast<int>(60.0 / currentBpm * fft.featureRate);
             
             // Veto if there is enough data
@@ -447,8 +504,22 @@ struct Engine::Impl {
         return currentBpm;
     }
 
-    double applyHysteresisAndCommit(double currentBpm) {
-        // --- C. COMMIT (Hysteresis/Escape Hatch) ---
+        double applyHysteresisAndCommit(double currentBpm) {
+        // --- LOCKED: total freeze. While the window is locked the only permitted
+        // movement is micro-drift within lockedDriftTolerance. Every other reading —
+        // half-time, double-time, hard jumps, glide — is rejected outright.
+        // The sole exit from this freeze is the release condition in estimateRawTempo
+        // (5s of <50% confidence), not any signal-based heuristic here.
+        if (tempo.isWindowLocked && tempo.currentStableBpm > 10.0) {
+            if (std::abs(currentBpm - tempo.currentStableBpm) > config.lockedDriftTolerance) {
+                return tempo.currentStableBpm;
+            }
+            tempo.currentStableBpm = (1.0 - config.hysteresisBlend) * tempo.currentStableBpm
+                                   + config.hysteresisBlend * currentBpm;
+            return tempo.currentStableBpm;
+        }
+
+        // --- UNLOCKED: existing logic runs as before ---
         if (tempo.currentStableBpm == 0.0) {
             tempo.currentStableBpm = currentBpm;
         } else {
@@ -464,8 +535,8 @@ struct Engine::Impl {
             }
 
             if (isOctaveError) {
-                // If it insists on the octave for 30 frames, break the lock
-                if (tempo.octaveMismatchCount > 30) {
+                // If it insists on the octave, break the lock
+                if (tempo.octaveMismatchCount > config.octaveMismatchTolerance) {
                     tempo.currentStableBpm = currentBpm; 
                     tempo.octaveMismatchCount = 0;
                 } else {
@@ -475,7 +546,7 @@ struct Engine::Impl {
             } else {
                 tempo.octaveMismatchCount = 0; 
                 // Smoothing and Hard Resets
-                if (std::abs(currentBpm - tempo.currentStableBpm) > 20.0) {
+                if (std::abs(currentBpm - tempo.currentStableBpm) > config.hardResetThreshold) {
                     // Hard reset if it's a massive shift
                     tempo.currentStableBpm = currentBpm;
                 } else {
@@ -512,7 +583,7 @@ void Engine::processBlock(const float* samples, int numSamples) {
     // Re-estimate tempo
     int noveltyLen = d.getNoveltyLength();
 
-    if (noveltyLen > 50) {
+    if (noveltyLen > d.config.warmupHops) {
         
         // Mathematical scale based on user input
         float inputScale = 1.0f;
@@ -532,17 +603,32 @@ void Engine::processBlock(const float* samples, int numSamples) {
             // Immediately scale the detected pulse back to Master 1/4 Note Tempo
             rawBpm /= inputScale;
 
+            double rawBeforeCommit = rawBpm;
+
             if (d.config.useHeuristics) {
-                rawBpm = d.applyAlternationHeuristics(rawBpm);
+                if (!d.tempo.isWindowLocked) {
+                    rawBpm = d.applyAlternationHeuristics(rawBpm);
+                }
                 rawBpm = d.applyHysteresisAndCommit(rawBpm);
 
                 outputBpm = rawBpm;
-                bool alreadyLockedFast = (d.tempo.currentStableBpm > d.Impl::FAST_TEMPO_THRESHOLD);
-                
-                if (!alreadyLockedFast && rawBpm > d.Impl::FAST_TEMPO_THRESHOLD && d.tempo.highBpmConfirmationCount < 12) {
+                bool alreadyLockedFast = (d.tempo.currentStableBpm > d.config.fastTempoThreshold);
+
+                if (!d.tempo.isWindowLocked && !alreadyLockedFast
+                        && rawBpm > d.config.fastTempoThreshold && d.tempo.highBpmConfirmationCount < 12) {
                     outputBpm *= 0.5;
                 }
             }
+
+            std::cout << "[DROP] raw=" << std::fixed << std::setprecision(1) << rawBeforeCommit
+                      << " | output=" << outputBpm
+                      << " | stable=" << d.tempo.currentStableBpm
+                      << " | locked=" << (d.tempo.isWindowLocked ? "Y" : "N")
+                      << " | lockTimer=" << d.tempo.windowLockTimer
+                      << " | lowConfStreak=" << d.tempo.lowConfidenceStreak
+                      << " | conf=" << std::setprecision(2) << latestResult_.confidence
+                      << " | highBpmConf=" << d.tempo.highBpmConfirmationCount
+                      << "\n";
 
             // Set the beat tracker lag using the resolution BPM
             double trackingBpmForBeatTracker = outputBpm * inputScale;
@@ -557,7 +643,7 @@ void Engine::processBlock(const float* samples, int numSamples) {
             result.confidence = 0.4 * dpResult.stability
                               + 0.4 * dpResult.alignment
                               + 0.2 * dpResult.coverage;
-            result.hasValidEstimate = (result.confidence > 0.2);
+            result.hasValidEstimate = (result.confidence >= getConfThreshold());
 
             auto end = std::chrono::high_resolution_clock::now();
             result.processingTimeMs =
@@ -574,6 +660,9 @@ Result Engine::getLatestResult() const {
 double Engine::getVisualDeadzone() const {
     return pImpl_->config.VISUAL_DEADZONE;
 }
+double Engine::getConfThreshold() const {
+    return pImpl_->config.confThreshold;
+}
 
 void Engine::updateTunableConfig(const Config& config) {
     setHeuristicsEnabled(config.useHeuristics);
@@ -588,8 +677,13 @@ void Engine::updateTunableConfig(const Config& config) {
     setNoveltySmoothing(config.noveltySmoothing);
     setFluxCompression(config.fluxCompression);
     setHysteresisBlend(config.hysteresisBlend);
+    setFastTempoThreshold(config.fastTempoThreshold);
+    setSilenceTimeoutSec(config.silenceTimeoutSec);
+    setWarmupHops(config.warmupHops);
+    setOctaveMismatchTolerance(config.octaveMismatchTolerance);
+    setHardResetThreshold(config.hardResetThreshold);
     
-    // uiSmoothing and VISUAL_DEADZONE are not set here as they are handled in the consumer application (CLI or WASM)
+    // uiSmoothing, VISUAL_DEADZONE, magneticSnapRange, and confThreshold are not set here as they are handled in the consumer application (CLI or WASM)
 }
 
 void Engine::setTargetResolution(NoteResolution resolution) {
@@ -639,6 +733,36 @@ void Engine::setHysteresisBlend(double blend) {
 }
 void Engine::setMagneticSnapRange(double range) {
     pImpl_->config.magneticSnapRange = range;
+}
+void Engine::setFastTempoThreshold(double value) {
+    pImpl_->config.fastTempoThreshold = value;
+}
+void Engine::setSilenceTimeoutSec(double value) {
+    pImpl_->config.silenceTimeoutSec = value;
+}
+void Engine::setWarmupHops(int value) {
+    pImpl_->config.warmupHops = value;
+}
+void Engine::setUiSmoothing(double alpha) {
+    pImpl_->config.uiSmoothing = alpha;
+}
+void Engine::setVisualDeadzone(double deadzone) {
+    pImpl_->config.VISUAL_DEADZONE = deadzone;
+}
+void Engine::setConfThreshold(double threshold) {
+    pImpl_->config.confThreshold = threshold;
+}
+void Engine::setOctaveMismatchTolerance(int tolerance) {
+    pImpl_->config.octaveMismatchTolerance = tolerance;
+}
+void Engine::setHardResetThreshold(double threshold) {
+    pImpl_->config.hardResetThreshold = threshold;
+}
+void Engine::setDynamicWindowPercent(double percent) {
+    pImpl_->config.dynamicWindowPercent = percent;
+}
+void Engine::setShatterConfidenceThreshold(double threshold) {
+    pImpl_->config.shatterConfidenceThreshold = threshold;
 }
 
 void Engine::reset() {

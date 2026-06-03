@@ -12,7 +12,6 @@ public:
     ~Engine();
 
     void processBlock(const float* samples, int numSamples);
-    Result getLatestResult() const;
     void reset();
 
     void updateTunableConfig(const Config& config);
@@ -32,8 +31,20 @@ public:
     void setFluxCompression(double compression);
     void setHysteresisBlend(double blend);
     void setMagneticSnapRange(double range);
+    void setFastTempoThreshold(double value);
+    void setSilenceTimeoutSec(double value);
+    void setWarmupHops(int value);
+    void setUiSmoothing(double alpha);
+    void setVisualDeadzone(double deadzone);
+    void setConfThreshold(double value);
+    void setOctaveMismatchTolerance(int tolerance);
+    void setHardResetThreshold(double threshold);
+    void setDynamicWindowPercent(double percent);
+    void setShatterConfidenceThreshold(double threshold);
 
+    Result getLatestResult() const;
     double getVisualDeadzone() const;
+    double getConfThreshold() const;
 
 private:
     struct Impl;

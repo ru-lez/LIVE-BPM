@@ -7,6 +7,7 @@
 #endif
 
 #include <emscripten/bind.h>
+#include <emscripten/val.h>
 
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
@@ -70,7 +71,7 @@ public:
         engine_->updateTunableConfig(c);
 
         val result = val::object();
-        result.set("heuristics", c.useHeuristics);
+        result.set("useHeuristics", c.useHeuristics);
         result.set("silenceThreshold", c.SILENCE_THRESHOLD);
         result.set("onsetSensitivity", c.onsetSensitivity);
         result.set("complexDomainWeight", c.complexDomainWeight);
@@ -85,6 +86,14 @@ public:
         result.set("fluxCompression", c.fluxCompression);
         result.set("hysteresisBlend", c.hysteresisBlend);
         result.set("magneticSnapRange", c.magneticSnapRange);
+        result.set("fastTempoThreshold", c.fastTempoThreshold);
+        result.set("silenceTimeoutSec", c.silenceTimeoutSec);
+        result.set("warmupHops", c.warmupHops);
+        result.set("confThreshold", c.confThreshold);
+        result.set("octaveMismatchTolerance", c.octaveMismatchTolerance);
+        result.set("hardResetThreshold", c.hardResetThreshold);
+        result.set("dynamicWindowPercent", c.dynamicWindowPercent);
+        result.set("shatterConfidenceThreshold", c.shatterConfidenceThreshold);
         
         return result;
     }
@@ -136,6 +145,36 @@ public:
     void setMagneticSnapRange(double val) { 
         engine_->setMagneticSnapRange(val); 
     }
+    void setFastTempoThreshold(double value) {
+        engine_->setFastTempoThreshold(value);
+    }
+    void setSilenceTimeoutSec(double value) {
+        engine_->setSilenceTimeoutSec(value);
+    }
+    void setWarmupHops(int value) {
+        engine_->setWarmupHops(value);
+    }
+    void setUiSmoothing(double alpha) {
+        engine_->setUiSmoothing(alpha);
+    }
+    void setVisualDeadzone(double deadzone) {
+        engine_->setVisualDeadzone(deadzone);
+    }
+    void setConfThreshold(double val) {
+        engine_->setConfThreshold(val);
+    }
+    void setOctaveMismatchTolerance(int val) {
+        engine_->setOctaveMismatchTolerance(val);
+    }
+    void setHardResetThreshold(double val) {
+        engine_->setHardResetThreshold(val);
+    }
+    void setDynamicWindowPercent(double percent) {
+        engine_->setDynamicWindowPercent(percent);
+    }
+    void setShatterConfidenceThreshold(double threshold) {
+        engine_->setShatterConfidenceThreshold(threshold);
+    }
 
 private:
     std::unique_ptr<livebpm::Engine> engine_;
@@ -176,5 +215,15 @@ EMSCRIPTEN_BINDINGS(livebpm) {
         .function("setFluxCompression", &LiveBpmWasm::setFluxCompression)
         .function("setHysteresisBlend", &LiveBpmWasm::setHysteresisBlend)
         .function("setMagneticSnapRange", &LiveBpmWasm::setMagneticSnapRange)
+        .function("setFastTempoThreshold", &LiveBpmWasm::setFastTempoThreshold)
+        .function("setSilenceTimeoutSec", &LiveBpmWasm::setSilenceTimeoutSec)
+        .function("setWarmupHops", &LiveBpmWasm::setWarmupHops)
+        .function("setUiSmoothing", &LiveBpmWasm::setUiSmoothing)
+        .function("setVisualDeadzone", &LiveBpmWasm::setVisualDeadzone)
+        .function("setConfThreshold", &LiveBpmWasm::setConfThreshold)
+        .function("setOctaveMismatchTolerance", &LiveBpmWasm::setOctaveMismatchTolerance)
+        .function("setHardResetThreshold", &LiveBpmWasm::setHardResetThreshold)
+        .function("setDynamicWindowPercent", &LiveBpmWasm::setDynamicWindowPercent)
+        .function("setShatterConfidenceThreshold", &LiveBpmWasm::setShatterConfidenceThreshold)
         .function("loadPreset", &LiveBpmWasm::loadPreset);
 }

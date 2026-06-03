@@ -49,18 +49,14 @@ class LiveBpmProcessor extends AudioWorkletProcessor {
             } else if (event.data.type === 'setParameter') {
                 const { param, value } = event.data;
                 if (this.engine) {
-                    if (param === 'silenceThreshold') this.engine.setSilenceThreshold(value);
-                    else if (param === 'onsetSensitivity') this.engine.setOnsetSensitivity(value);
-                    else if (param === 'complexDomainWeight') this.engine.setComplexDomainWeight(value);
-                    else if (param === 'minBpm') this.engine.setMinBpm(value);
-                    else if (param === 'maxBpm') this.engine.setMaxBpm(value);
-                    else if (param === 'doubleTimeJumpThreshold') this.engine.setDoubleTimeJumpThreshold(value);
-                    else if (param === 'halfTimeJumpThreshold') this.engine.setHalfTimeJumpThreshold(value);
-                    else if (param === 'gatingAlpha') this.engine.setGatingAlpha(value);
-                    else if (param === 'noveltySmoothing') this.engine.setNoveltySmoothing(value);
-                    else if (param === 'fluxCompression') this.engine.setFluxCompression(value);
-                    else if (param === 'hysteresisBlend') this.engine.setHysteresisBlend(value);
-                    else if (param === 'magneticSnapRange') this.engine.setMagneticSnapRange(value);
+                    const capitalizedParam = param.charAt(0).toUpperCase() + param.slice(1);
+                    const methodName = 'set' + capitalizedParam;
+
+                    if (typeof this.engine[methodName] === 'function') {
+                        this.engine[methodName](value);
+                    } else {
+                        console.warn(`[AudioWorklet] Unknown parameter received: ${param}`);
+                    }
                 }
             } else if (event.data.type === 'reset') {
                 if (this.engine) {
