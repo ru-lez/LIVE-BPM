@@ -7,7 +7,7 @@ namespace livebpm {
         HalfNote = 1,           // Multiplies BPM by 2.0
         QuarterNote = 2,        // Default (x 1.0)
         EighthNote = 3,         // Multiplies BPM by 0.5
-        EighthNoteTriplet = 4,  // Multiplies BPM by 0.6667 
+        EighthNoteTriplet = 4,  // Multiplies BPM by 0.333 
         SixteenthNote = 5,       // Multiplies BPM by 0.25 
         SmartMixed = 6          // Dynamically choose between quarter and eighth based on signal characteristics
     };
@@ -51,8 +51,6 @@ namespace livebpm {
 
         // Percentage range based on current stable BPM
         double dynamicWindowPercent = 0.40;
-        // Break the lock and wide-open the bounds if confidence drops below this
-        double shatterConfidenceThreshold = 0.70;
         // Max BPM drift allowed while locked; anything beyond this is rejected outright
         double lockedDriftTolerance = 3.0;
 

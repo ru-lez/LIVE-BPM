@@ -40,7 +40,6 @@ public:
     void setOctaveMismatchTolerance(int tolerance);
     void setHardResetThreshold(double threshold);
     void setDynamicWindowPercent(double percent);
-    void setShatterConfidenceThreshold(double threshold);
     void setLockedDriftTolerance(double tolerance);
     void setLockEntryConfidence(double confidence);
     void setLockReleaseConfidence(double confidence);

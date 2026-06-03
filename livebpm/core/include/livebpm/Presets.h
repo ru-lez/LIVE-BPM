@@ -30,7 +30,7 @@ namespace livebpm {
             c.octaveMismatchTolerance = 100;
             c.hardResetThreshold = 25.0;
             c.dynamicWindowPercent = 0.30;
-            c.shatterConfidenceThreshold = 0.70;
+            c.lockEntryConfidence =0.70;
         } else if (name == "guitar") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.03;
@@ -54,7 +54,7 @@ namespace livebpm {
             c.octaveMismatchTolerance = 60;
             c.hardResetThreshold = 20.0;
             c.dynamicWindowPercent = 0.40;
-            c.shatterConfidenceThreshold = 0.75;
+            c.lockEntryConfidence =0.75;
         } else if (name == "electricguitar") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.02;
@@ -78,7 +78,7 @@ namespace livebpm {
             c.octaveMismatchTolerance = 60;
             c.hardResetThreshold = 20.0;
             c.dynamicWindowPercent = 0.40;
-            c.shatterConfidenceThreshold = 0.75;
+            c.lockEntryConfidence =0.75;
         } else if (name == "saxophone") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.020; 
@@ -102,7 +102,7 @@ namespace livebpm {
             c.octaveMismatchTolerance = 100;
             c.hardResetThreshold = 25.0;
             c.dynamicWindowPercent = 0.35;
-            c.shatterConfidenceThreshold = 0.70;
+            c.lockEntryConfidence =0.70;
         } else if (name == "acousticbass" || name == "acoustic bass") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.025; 
@@ -126,7 +126,7 @@ namespace livebpm {
             c.octaveMismatchTolerance = 200;
             c.hardResetThreshold = 15.0;
             c.dynamicWindowPercent = 0.25;
-            c.shatterConfidenceThreshold = 0.65;
+            c.lockEntryConfidence =0.65;
         } else if (name == "electricbass") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.015;
@@ -150,7 +150,7 @@ namespace livebpm {
             c.octaveMismatchTolerance = 200;
             c.hardResetThreshold = 20;
             c.dynamicWindowPercent = 0.30;
-            c.shatterConfidenceThreshold = 0.65;
+            c.lockEntryConfidence =0.65;
         } else if (name == "cajon") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.03;
@@ -174,7 +174,7 @@ namespace livebpm {
             c.octaveMismatchTolerance = 30;
             c.hardResetThreshold = 15.0;
             c.dynamicWindowPercent = 0.50;
-            c.shatterConfidenceThreshold = 0.70;
+            c.lockEntryConfidence =0.70;
         } else if (name == "liveband") {
             c.useHeuristics = true;
             c.SILENCE_THRESHOLD = 0.04;
@@ -198,7 +198,7 @@ namespace livebpm {
             c.octaveMismatchTolerance = 40;
             c.hardResetThreshold = 20.0;
             c.dynamicWindowPercent = 0.45;
-            c.shatterConfidenceThreshold = 0.65;
+            c.lockEntryConfidence =0.65;
         } else if (name == "slowacoustic") {
             c.useHeuristics = false;
             c.SILENCE_THRESHOLD = 0.01;
@@ -222,7 +222,7 @@ namespace livebpm {
             c.octaveMismatchTolerance = 150;
             c.hardResetThreshold = 40.0;
             c.dynamicWindowPercent = 0.25;
-            c.shatterConfidenceThreshold = 0.60;
+            c.lockEntryConfidence =0.60;
         }
 
         return c;

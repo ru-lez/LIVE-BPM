@@ -93,7 +93,6 @@ public:
         result.set("octaveMismatchTolerance", c.octaveMismatchTolerance);
         result.set("hardResetThreshold", c.hardResetThreshold);
         result.set("dynamicWindowPercent", c.dynamicWindowPercent);
-        result.set("shatterConfidenceThreshold", c.shatterConfidenceThreshold);
         result.set("lockedDriftTolerance", c.lockedDriftTolerance);
         result.set("lockEntryConfidence", c.lockEntryConfidence);
         result.set("lockReleaseConfidence", c.lockReleaseConfidence);
@@ -175,9 +174,6 @@ public:
     void setDynamicWindowPercent(double percent) {
         engine_->setDynamicWindowPercent(percent);
     }
-    void setShatterConfidenceThreshold(double threshold) {
-        engine_->setShatterConfidenceThreshold(threshold);
-    }
     void setLockedDriftTolerance(double val) {
         engine_->setLockedDriftTolerance(val);
     }
@@ -236,7 +232,6 @@ EMSCRIPTEN_BINDINGS(livebpm) {
         .function("setOctaveMismatchTolerance", &LiveBpmWasm::setOctaveMismatchTolerance)
         .function("setHardResetThreshold", &LiveBpmWasm::setHardResetThreshold)
         .function("setDynamicWindowPercent", &LiveBpmWasm::setDynamicWindowPercent)
-        .function("setShatterConfidenceThreshold", &LiveBpmWasm::setShatterConfidenceThreshold)
         .function("setLockedDriftTolerance", &LiveBpmWasm::setLockedDriftTolerance)
         .function("setLockEntryConfidence", &LiveBpmWasm::setLockEntryConfidence)
         .function("setLockReleaseConfidence", &LiveBpmWasm::setLockReleaseConfidence)

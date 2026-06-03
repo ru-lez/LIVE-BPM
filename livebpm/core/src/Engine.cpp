@@ -41,8 +41,12 @@
  *        prevent accidental double-time BPM readings. Heuristics are automatically
  *        disabled once the dynamic window is locked.
  *     2. Hysteresis Lock: The system resists sudden BPM changes based on its history.
- *        An asymmetric veto now strictly blocks half-time candidates while still
- *        allowing legitimate double-time readings, which isimportant for dense percussion.
+ *        Readings close to an exact 2x (double-time) or 0.5x (half-time) of the current
+ *        stable BPM are treated as octave errors and clamped back to the stable value;
+ *        only after a sustained run of them (octaveMismatchTolerance hops) does the stable
+ *        BPM concede and jump. Double-time and half-time use separate detection windows
+ *        (doubleTimeJumpThreshold / halfTimeJumpThreshold), which is important for dense
+ *        percussion.
  *        If the audio signal is muddy or ambiguous, the engine holds onto the last
  *        stable BPM instead of jumping to half-time or double-time.
  * 
@@ -509,7 +513,8 @@ struct Engine::Impl {
         // movement is micro-drift within lockedDriftTolerance. Every other reading —
         // half-time, double-time, hard jumps, glide — is rejected outright.
         // The sole exit from this freeze is the release condition in estimateRawTempo
-        // (5s of <50% confidence), not any signal-based heuristic here.
+        // (~3.2 s / 300 hops with confidence <= lockReleaseConfidence), not any
+        // signal-based heuristic here.
         if (tempo.isWindowLocked && tempo.currentStableBpm > 10.0) {
             if (std::abs(currentBpm - tempo.currentStableBpm) > config.lockedDriftTolerance) {
                 return tempo.currentStableBpm;
@@ -603,8 +608,6 @@ void Engine::processBlock(const float* samples, int numSamples) {
             // Immediately scale the detected pulse back to Master 1/4 Note Tempo
             rawBpm /= inputScale;
 
-            double rawBeforeCommit = rawBpm;
-
             if (d.config.useHeuristics) {
                 if (!d.tempo.isWindowLocked) {
                     rawBpm = d.applyAlternationHeuristics(rawBpm);
@@ -619,16 +622,6 @@ void Engine::processBlock(const float* samples, int numSamples) {
                     outputBpm *= 0.5;
                 }
             }
-
-            std::cout << "[DROP] raw=" << std::fixed << std::setprecision(1) << rawBeforeCommit
-                      << " | output=" << outputBpm
-                      << " | stable=" << d.tempo.currentStableBpm
-                      << " | locked=" << (d.tempo.isWindowLocked ? "Y" : "N")
-                      << " | lockTimer=" << d.tempo.windowLockTimer
-                      << " | lowConfStreak=" << d.tempo.lowConfidenceStreak
-                      << " | conf=" << std::setprecision(2) << latestResult_.confidence
-                      << " | highBpmConf=" << d.tempo.highBpmConfirmationCount
-                      << "\n";
 
             // Set the beat tracker lag using the resolution BPM
             double trackingBpmForBeatTracker = outputBpm * inputScale;
@@ -685,6 +678,7 @@ void Engine::updateTunableConfig(const Config& config) {
     setLockedDriftTolerance(config.lockedDriftTolerance);
     setLockEntryConfidence(config.lockEntryConfidence);
     setLockReleaseConfidence(config.lockReleaseConfidence);
+    setDynamicWindowPercent(config.dynamicWindowPercent);
 
     // uiSmoothing, VISUAL_DEADZONE, magneticSnapRange, and confThreshold are not set here as they are handled in the consumer application (CLI or WASM)
 }
@@ -763,9 +757,6 @@ void Engine::setHardResetThreshold(double threshold) {
 }
 void Engine::setDynamicWindowPercent(double percent) {
     pImpl_->config.dynamicWindowPercent = percent;
-}
-void Engine::setShatterConfidenceThreshold(double threshold) {
-    pImpl_->config.shatterConfidenceThreshold = threshold;
 }
 void Engine::setLockedDriftTolerance(double tolerance) {
     pImpl_->config.lockedDriftTolerance = tolerance;

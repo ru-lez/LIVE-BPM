@@ -61,7 +61,7 @@ emcmake cmake ..
 cmake --build .
 ```
 
-This generates `livebpm_wasm.js` (JavaScript Loader) & `livebpm_wasm.mwasm` (Binary WebAssembly Module)
+This generates `livebpm_wasm.js` (JavaScript Loader) & `livebpm_wasm.wasm` (Binary WebAssembly Module)
 
 ### 3. Serve Locally
 Ensure you are on the `build-wasm` folder.
@@ -129,7 +129,7 @@ Audio
                     [Stability & Post-Processing]
                     - Dynamic Tracking Window (+ lock timer)
                     - Alternation Heuristics (gated when locked)
-                    - Asymmetric Hysteresis Veto
+                    - Octave-Error Hysteresis Veto
                     - Final BPM Commit
                                |
                                v
@@ -182,8 +182,12 @@ Audio
  *        prevent accidental double-time BPM readings. Heuristics are automatically
  *        disabled once the dynamic window is locked.
  *     2. Hysteresis Lock: The system resists sudden BPM changes based on its history.
- *        An asymmetric veto now strictly blocks half-time candidates while still
- *        allowing legitimate double-time readings, which isimportant for dense percussion.
+ *        Readings close to an exact 2x (double-time) or 0.5x (half-time) of the current
+ *        stable BPM are treated as octave errors and clamped back to the stable value;
+ *        only after a sustained run of them (octaveMismatchTolerance hops) does the stable
+ *        BPM concede and jump. Double-time and half-time use separate detection windows
+ *        (doubleTimeJumpThreshold / halfTimeJumpThreshold), which is important for dense
+ *        percussion.
  *        If the audio signal is muddy or ambiguous, the engine holds onto the last
  *        stable BPM instead of jumping to half-time or double-time.
  * 
@@ -225,7 +229,7 @@ The engine assumes the pulses it hears are lasting for two full beats.
 The engine assumes it is hearing two pulses for every single beat.
 - **Best for:** Aggressive 8th-note guitar strumming, driving punk rock basslines, or rapid hi-hat patterns. It prevents the engine from accidentally doubling the reported tempo when the musician is "playing eighths."
 
-**1/8 Note Triplet** · *Multiplies engine BPM by ~0.667*
+**1/8 Note Triplet** · *Multiplies engine BPM by ~0.333*
 The engine assumes it is hearing three evenly spaced pulses per beat.
 - **Best for:** Blues, shuffle grooves, jazz ride cymbal patterns, and 6/8 or 12/8 time signatures. It ensures the mathematical "swing" doesn't confuse the beat tracker into outputting fractional or unstable tempos.
 
@@ -295,11 +299,6 @@ Once a stable tempo is locked, restricts the estimator’s search range to ±X% 
 - **Low:** Extremely narrow window — highly resistant to half/double-time errors.
 - **High:** Wider window — more flexible but allows more risk of octave jumps.
 
-**Shatter Threshold** · default `0.70` · range `0.50 – 0.90`
-Confidence level below which the dynamic window is temporarily opened again.
-- **Low:** Window stays locked even during uncertain passages (maximum stability).
-- **High:** Window shatters more easily on brief dips in confidence (more responsive).
-
 **Target Minimum BPM** · default `40` · range `30 – 120`
 Lower bound of the tempo search window.
 - **Low:** Allows detection of very slow tempos.
@@ -325,15 +324,15 @@ The BPM boundary where the engine's heuristics automatically activate to aggress
 - **Low:** Starts penalising double-time readings at moderately slow speeds.
 - **High:** Allows the engine to freely track fast tempos without heuristic interference.
 
-**Double-Time Jump Tolerance** · default `20` · range `5 – 40`
-Confidence delta required before the engine accepts a sudden doubling of BPM (e.g. 60 → 120).
-- **Low:** BPM can jump to double speed with little evidence.
-- **High:** Engine demands a very strong signal before accepting a 2× jump.
+**Double-Time Jump Tolerance** · default `20` BPM · range `5 – 40`
+How close (in **BPM**, not confidence) a new reading must be to *exactly twice* the current tempo to be flagged as a double-time octave error and held back. A flagged reading is suppressed until it persists for `Octave Lock Tolerance` consecutive hops.
+- **Low:** Only readings very near 2× are caught; genuine doublings pass more easily.
+- **High:** A wider band around 2× is suppressed, so the engine resists doubling more strongly.
 
-**Half-Time Jump Tolerance** · default `10` · range `5 – 30`
-Confidence delta required before the engine accepts a sudden halving of BPM (e.g. 120 → 60).
-- **Low:** BPM can drop to half speed with little evidence.
-- **High:** Engine demands a very strong signal before accepting a ½× drop.
+**Half-Time Jump Tolerance** · default `10` BPM · range `5 – 30`
+How close (in **BPM**, not confidence) a new reading must be to *exactly half* the current tempo to be flagged as a half-time octave error and held back. A flagged reading is suppressed until it persists for `Octave Lock Tolerance` consecutive hops.
+- **Low:** Only readings very near ½× are caught; genuine halvings pass more easily.
+- **High:** A wider band around ½× is suppressed, so the engine resists halving more strongly.
 
 **Hard Reset Threshold** · default `20` · range `5 – 50`
 The BPM difference required to bypass the engine's visual smoothing.
@@ -372,9 +371,9 @@ The minimum dynamic programming score (based on alignment, stability, and covera
 ---
 
 ## Known Limitations
-* BPM of Legato instruments may take a few seconds to intially recognise (up to 4 seconds).
+* BPM of Legato instruments may take a few seconds to initially recognise (up to 4 seconds).
 * Complex rhythms (like 16th-note funk patterns) may still briefly trick the engine until hysteresis lock corrects it.
-* Note value switching flushes the DSP to prevent buffer maths errors. This means the engine will be temporarily unavailable (~0.25s or 50 hops) while it rebuilds the novelty curve.
+* Note value switching flushes the DSP to prevent buffer maths errors. This means the engine will be temporarily unavailable (~0.5s, i.e. ~50 hops at the default `warmupHops`) while it rebuilds the novelty curve.
 
 
 ## Authors

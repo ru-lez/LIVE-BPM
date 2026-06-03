@@ -362,12 +362,6 @@
                         <input type="range" id="dynamicWindowPercent" min="0.10" max="1.00" step="0.05" value="0.40" oninput="updateParam('dynamicWindowPercent', this.value)">
                     </div>
                     <div class="param-group">
-                        <label data-tip="Breaks the tracking lock and resets bounds to global max/min if confidence drops below this level.">
-                            Shatter Threshold <span id="shatterConfidenceThresholdVal">0.70</span>
-                        </label>
-                        <input type="range" id="shatterConfidenceThreshold" min="0.50" max="0.90" step="0.05" value="0.70" oninput="updateParam('shatterConfidenceThreshold', this.value)">
-                    </div>
-                    <div class="param-group">
                         <label data-tip="The lowest tempo range the engine will initially search for.">
                             Target Minimum BPM <span id="minBpmVal">40</span>
                         </label>
@@ -530,7 +524,7 @@
             warmupHops: 0, fastTempoThreshold: 0, octaveMismatchTolerance: 0, hardResetThreshold: 0,
             visualDeadzone: 1, silenceTimeoutSec: 1,
             complexDomainWeight: 2, gatingAlpha: 2, noveltySmoothing: 2, hysteresisBlend: 2, uiSmoothing: 2,
-            magneticSnapRange: 2, confThreshold: 2, dynamicWindowPercent: 2, shatterConfidenceThreshold: 2,
+            magneticSnapRange: 2, confThreshold: 2, dynamicWindowPercent: 2,
             lockEntryConfidence: 2, lockReleaseConfidence: 2, lockedDriftTolerance: 1
             // Anything not in this list defaults to 3 decimal places
         };

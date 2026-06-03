@@ -21,7 +21,7 @@ public:
     //   outBandEnergies      = band energies for this frame  (write)
     //   filterBank           = precomputed triangular filter weights (numBands * numBins)
     //   numBins              = FFT bins (fftSize/2 + 1)
-    //   numBands             = number of semitone bands (typically ~88)
+    //   numBands             = number of semitone bands (~86 for A1-B8 at the default range)
     //   maxFilterWidth       = how many adjacent bands to consider for flux
     static float superFlux(const float* currentMag,
                               const float* previousBandEnergies,

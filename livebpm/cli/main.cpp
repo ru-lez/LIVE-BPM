@@ -47,14 +47,15 @@ void signalHandler(int) { running.store(false); }
 static livebpm::dsp::Biquad highpass;
 static bool filterInitialized = false;
 
-void audioCallback(ma_device* /*device*/, void* /*output*/,
+void audioCallback(ma_device* device, void* /*output*/,
                    const void* input, ma_uint32 frameCount)
 {
     if (g_engine && input) {
-        // Initialise filter once on first callback
+        // Initialise filter once on first callback using the actual negotiated rate
         if (!filterInitialized) {
             highpass.setCoefficients(
-                livebpm::dsp::Biquad::makeHighpass(48000.0, 80.0));
+                livebpm::dsp::Biquad::makeHighpass(
+                    static_cast<double>(device->sampleRate), 80.0));
             filterInitialized = true;
         }
 
