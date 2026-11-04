@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "livebpm/dsp/TempoEstimation.h"
 #include "TestSignals.h"
+#include <cmath>
 
 using namespace livebpm::dsp;
 using namespace livebpm::test;
@@ -107,10 +108,36 @@ TEST_CASE("TempoEstimation: Bounding constraints enforces minBpm and maxBpm", "[
 TEST_CASE("TempoEstimation: estimate returns empty result if length is less than 2", "[tempo]") {
     TempoEstimation te(1024);
     float singleSample = 1.0f;
-    
+
     auto result = te.estimate(&singleSample, 1, 93.75, 40.0, 240.0, 0.0, 0.0);
-    
+
     // Aborted estimation should return default TempoResult (0.0 BPM)
     REQUIRE(result.bpm == 0.0);
     REQUIRE(result.strength == 0.0);
+}
+
+TEST_CASE("TempoEstimation: degenerate BPM window stays in bounds", "[tempo]") {
+    // Regression test: a collapsed search window (e.g. the dynamic window shrinking
+    // around a degenerate stable BPM) used to leave bestLag beyond the analysed
+    // buffer, making applyBreakthroughLogic read autocorr out of range (SIGSEGV on
+    // memory-tagged Android devices, garbage estimates elsewhere).
+    double featureRate = 93.75;
+    auto novelty = generatePeriodicNovelty(120.0, featureRate, 4.0);
+
+    TempoEstimation te(static_cast<int>(novelty.size()));
+
+    // maxBpm of 2 -> minLag ~2812, far beyond the ~375-sample buffer.
+    auto result = te.estimate(
+        novelty.data(),
+        static_cast<int>(novelty.size()),
+        featureRate,
+        1.0,
+        2.0,
+        0.0,
+        0.0
+    );
+
+    // Must not crash, and must return a finite, non-negative tempo.
+    REQUIRE(std::isfinite(result.bpm));
+    REQUIRE(result.bpm >= 0.0);
 }

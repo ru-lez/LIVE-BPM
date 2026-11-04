@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Base window theme applied before Compose draws. Uses a platform dark
+        theme so no extra AppCompat/Material-Components dependency is required.
+    -->
+    <style name="Theme.LiveBPM" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
+    </style>
+</resources>

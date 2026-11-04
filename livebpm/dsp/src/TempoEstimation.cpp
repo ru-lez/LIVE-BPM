@@ -100,6 +100,15 @@ struct TempoEstimation::Impl {
         minLag = std::max(1, minLag);
         maxLag = std::min(maxLag, length - 1);
 
+        // A collapsed BPM window (e.g. a degenerate stable tempo upstream) can push
+        // minLag past maxLag. bestLag would then start beyond the analysed region and
+        // every later autocorr[bestLag] read is out of bounds (crashes on devices with
+        // memory tagging; silently garbage elsewhere). Clamp to the nearest valid lag.
+        if (minLag > maxLag) {
+            maxLag = std::max(1, maxLag);
+            minLag = maxLag;
+        }
+
         // Reset analysis state for the new processing frame
         analysis = LagAnalysis{};
         analysis.bestLag = minLag;

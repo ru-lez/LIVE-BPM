@@ -93,6 +93,16 @@ if(UNIX AND NOT APPLE)
  target_link_libraries(livebpm_cli PRIVATE pthread dl m)
 endif()
 
+# --- Accuracy harness (offline algorithm testing: synthetic + WAV manifest) ---
+add_executable(livebpm_accuracy tests/accuracy/AccuracyRunner.cpp)
+target_compile_options(livebpm_accuracy PRIVATE ${LIVEBPM_WARNINGS})
+target_link_libraries(livebpm_accuracy PRIVATE livebpm_core)
+target_include_directories(livebpm_accuracy PRIVATE extern/miniaudio tests/helpers)
+
+if(UNIX AND NOT APPLE)
+ target_link_libraries(livebpm_accuracy PRIVATE pthread dl m)
+endif()
+
 # WASM build (only if compiling with Emscripten)
 if (EMSCRIPTEN)
     add_executable(livebpm_wasm wasm/bridge.cpp)

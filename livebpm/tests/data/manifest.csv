@@ -1,0 +1,10 @@
+# LiveBPM accuracy manifest
+# Format: path, expected_bpm [, preset]
+# Paths are relative to this file. WAV/MP3/FLAC supported (decoded via miniaudio).
+# Run with:  livebpm_accuracy tests/data/manifest.csv
+#
+# Drop audio files into this folder and list them below, e.g.:
+# billiejean.wav, 117, liveband
+BillieJean.mp3, 117, liveband
+distortion_Cmaj_high_120.mp3, 120, liveband
+Cmajorat60tonguedandslurred1.mp3, 60, liveband

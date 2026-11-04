@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Teal "tempo bars" mark, centred within the adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#22E0E0" android:pathData="M36,48 h6 v18 h-6 z" />
+    <path android:fillColor="#22E0E0" android:pathData="M46,40 h6 v34 h-6 z" />
+    <path android:fillColor="#22E0E0" android:pathData="M56,34 h6 v40 h-6 z" />
+    <path android:fillColor="#22E0E0" android:pathData="M66,44 h6 v22 h-6 z" />
+</vector>

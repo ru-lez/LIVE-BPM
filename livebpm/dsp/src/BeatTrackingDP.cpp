@@ -17,6 +17,11 @@ BeatTrackingResult BeatTrackingDP::track(
     if (length < 2 || beatRefLag < 1)
         return BeatTrackingResult{};
 
+    // Clamp to the buffer so a degenerate upstream BPM (which can produce a huge
+    // beatRefLag) cannot overflow beatRefLag * 2 below and request an absurd
+    // penalty_ resize (std::length_error).
+    beatRefLag = std::min(beatRefLag, length - 1);
+
     // --- Step 1: Pre-compute penalty function ---
     // Search range: [beatRef/2, beatRef*2]
     int minLag = std::max(1, beatRefLag / 2);
